@@ -73,7 +73,7 @@
         <button class="nav-tab active" data-tab="practice">📖 练习</button>
         <button class="nav-tab" data-tab="wrongbook">📕 错题</button>
         <button class="nav-tab" data-tab="import">📥 导入</button>
-        <button class="nav-tab" data-tab="export">📤 高级</button>
+        <button class="nav-tab" data-tab="export">📤 导出</button>
         <button class="nav-tab" data-tab="allQuestions">📋 全部</button>
     </div>
     <div class="main-content" id="mainContent"></div>
@@ -246,10 +246,6 @@
         return `<div class="practice-mode-switch">
             <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
             <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
-        </div>
-        <div class="auto-sync-row">
-            <label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步到云端</label>
-        </div>
         <div class="question-card" id="qcard">
             <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">${q.type==='multi'?'多选':'单选'}</span></div>
             <div class="q-text">${q.q}</div>
@@ -316,6 +312,25 @@
     }
 
     function renderExportMode() {
+    const token = getGistToken();
+    const tokenStatus = token ? '✅ Token 已保存' : '⚠️ 未设置 Token';
+    return `<div>
+        <h3>📤 导出与同步</h3>
+        <button class="nav-btn" id="exportBtn">⬇️ 导出全部数据</button>
+        <button class="nav-btn" id="downloadGistBtn" style="margin-left:10px;">☁️ 从云端下载</button>
+        <div class="auto-sync-row" style="margin:16px 0;">
+            <label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步到云端</label>
+            <span style="font-size:0.85em;color:#5c4f3a;">（答完题自动上传，无需手动操作）</span>
+        </div>
+        <div style="margin-top:20px;">
+            <h4>🔑 GitHub Token 设置</h4>
+            <input type="password" id="tokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
+            <div style="font-size:0.85em;margin-top:4px;color:${token?'var(--correct)':'#d4685c'};">${tokenStatus}</div>
+            <button class="nav-btn" id="saveTokenBtn" style="margin-top:8px;">💾 保存 Token</button>
+            <p style="margin-top:10px;font-size:0.9em;color:#5c4f3a;"><a href="https://github.com/settings/tokens" target="_blank">生成 Token</a>，勾选 <b>gist</b> 权限。</p>
+        </div>
+    </div>`;
+} {
         const token = getGistToken();
         const tokenStatus = token ? '✅ Token 已保存' : '⚠️ 未设置 Token';
         return `<div>
