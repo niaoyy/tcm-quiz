@@ -3,140 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>在线练习系统</title>
+    <title>中医题库 · 一键云同步</title>
     <style>
         :root {
-            --bg: #f5f0eb;
-            --card-bg: #fffef9;
-            --text: #2c2416;
-            --accent: #8b5e3c;
-            --correct: #4a7c59;
-            --wrong: #d4685c;
-            --wrong-bg: #fef3f0;
-            --border: #e0d5c7;
-            --radius: 14px;
-            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            --bg: #f5f0eb; --card-bg: #fffef9; --text: #2c2416; --accent: #8b5e3c;
+            --correct: #4a7c59; --wrong: #d4685c; --wrong-bg: #fef3f0; --border: #e0d5c7;
+            --radius: 14px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: var(--font);
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            line-height: 1.6;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-        }
-        .app-container { max-width: 1000px; margin: 0 auto; padding: 12px; }
-        .header {
-            background: var(--card-bg); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px;
-            box-shadow: 0 2px 12px rgba(60,40,20,0.08); border: 1px solid var(--border);
-            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-            position: sticky; top: 8px; z-index: 100;
-        }
-        .header .logo { font-size: 1.3em; font-weight: 700; color: var(--accent); white-space: nowrap; }
-        .category-selector { display: flex; align-items: center; gap: 8px; flex: 1; overflow-x: auto; padding: 4px 0; }
-        .category-chip {
-            padding: 8px 16px; border-radius: 20px; background: #f0ebe0; font-weight: 600;
-            font-size: 0.9em; white-space: nowrap; border: 1px solid transparent; cursor: pointer; transition: 0.2s;
-        }
-        .category-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .manage-categories-btn {
-            padding: 8px 12px; border-radius: 20px; border: 1px solid var(--border);
-            background: #fff; font-weight: 600; cursor: pointer; font-size: 0.9em;
-        }
-        .nav-tabs {
-            display: flex; gap: 4px; background: var(--card-bg); border-radius: var(--radius); padding: 5px;
-            margin-bottom: 12px; box-shadow: 0 2px 12px rgba(60,40,20,0.08); border: 1px solid var(--border); flex-wrap: wrap;
-        }
-        .nav-tab {
-            padding: 12px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.95em;
-            border: none; background: transparent; color: #5c4f3a; flex: 1; min-width: 70px;
-            text-align: center; white-space: nowrap; transition: 0.2s;
-        }
-        .nav-tab.active { background: var(--accent); color: #fff; }
-        .main-content {
-            background: var(--card-bg); border-radius: var(--radius); padding: 18px 16px;
-            box-shadow: 0 2px 12px rgba(60,40,20,0.08); border: 1px solid var(--border); min-height: 400px;
-        }
-        .question-card {
-            border: 1px solid var(--border); border-radius: 12px; padding: 18px 16px;
-            margin-bottom: 14px; background: #fffef9; transition: 0.2s;
-        }
-        .question-card.correct-card { border-left: 5px solid var(--correct); background: #f0f9f0; }
-        .question-card.wrong-card { border-left: 5px solid var(--wrong); background: var(--wrong-bg); }
-        .q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .q-number { font-weight: 700; color: var(--accent); background: #f8f0e4; padding: 4px 12px; border-radius: 14px; }
-        .q-type { font-size: 0.8em; background: #f0ebe0; padding: 3px 10px; border-radius: 10px; }
-        .q-text { font-weight: 600; font-size: 1.05em; margin-bottom: 12px; line-height: 1.5; }
-        .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-        .option {
-            padding: 14px 14px; border-radius: 10px; border: 2px solid var(--border);
-            background: #fdfcf7; display: flex; align-items: center; gap: 10px;
-            font-size: 1em; min-height: 50px; transition: 0.15s; cursor: pointer;
-        }
-        .option:active { background: #f0e8d8; border-color: var(--accent); }
-        .option.selected { border-color: var(--accent); background: #fdf3e4; font-weight: 600; }
-        .option.correct-answer { border-color: var(--correct) !important; background: #e0f2e0 !important; }
-        .option.wrong-answer { border-color: var(--wrong) !important; background: #ffe8e5 !important; }
-        .opt-letter { font-weight: 700; color: var(--accent); min-width: 24px; text-align: center; font-size: 1.1em; }
-        .feedback {
-            padding: 10px 12px; border-radius: 8px; font-weight: 600; margin-bottom: 10px; display: none;
-        }
-        .feedback.show { display: block; }
-        .feedback.correct-fb { background: #e0f2e0; color: #2d5a3b; }
-        .feedback.wrong-fb { background: #ffe8e5; color: #7b2d2d; }
-        .confirm-btn, .copy-btn {
-            padding: 12px 18px; border-radius: 24px; font-weight: 700; font-size: 1em;
-            border: 2px solid var(--accent); background: #fff; color: var(--accent);
-            cursor: pointer; min-width: 130px; text-align: center;
-        }
-        .confirm-btn { background: var(--correct); color: #fff; border: none; margin-bottom: 10px; }
-        .nav-buttons { display: flex; justify-content: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
-        .nav-btn {
-            padding: 12px 20px; border-radius: 24px; font-weight: 700; border: 2px solid var(--border);
-            background: #fff; cursor: pointer; min-width: 80px;
-        }
-        .btn-primary-nav { background: var(--accent); color: #fff; border: none; }
-        .import-area textarea { width: 100%; min-height: 150px; border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-family: var(--font); font-size: 0.95em; }
-        .toast {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #333; color: #fff; padding: 12px 24px; border-radius: 24px;
-            font-weight: 600; z-index: 999; opacity: 0; transition: 0.3s;
-        }
-        .toast.show { opacity: 1; }
-        .modal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4); display: flex; justify-content: center;
-            align-items: center; z-index: 200;
-        }
-        .modal-content { background: #fff; border-radius: 16px; padding: 20px; max-width: 400px; width: 90%; }
-        .practice-mode-switch { display: flex; justify-content: center; gap: 12px; margin-bottom: 14px; }
-        .practice-mode-btn {
-            padding: 10px 18px; border-radius: 24px; border: 2px solid var(--border);
-            background: #fff; font-weight: 600; cursor: pointer; transition: 0.2s;
-        }
-        .practice-mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .remove-wrong-btn {
-            background: none; border: none; color: var(--wrong); font-size: 1.3em;
-            cursor: pointer; padding: 0 8px; line-height: 1; font-weight: bold;
-        }
-        button { touch-action: manipulation; cursor: pointer; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.6; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+        .app-container { max-width:1000px; margin:0 auto; padding:12px; }
+        .header { background:var(--card-bg); border-radius:var(--radius); padding:14px 16px; margin-bottom:12px; box-shadow:0 2px 12px rgba(60,40,20,0.08); border:1px solid var(--border); display:flex; flex-wrap:wrap; align-items:center; gap:12px; position:sticky; top:8px; z-index:100; }
+        .header .logo { font-size:1.3em; font-weight:700; color:var(--accent); white-space:nowrap; }
+        .category-selector { display:flex; align-items:center; gap:8px; flex:1; overflow-x:auto; padding:4px 0; }
+        .category-chip { padding:8px 16px; border-radius:20px; background:#f0ebe0; font-weight:600; font-size:0.9em; white-space:nowrap; border:1px solid transparent; cursor:pointer; transition:0.2s; }
+        .category-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .manage-categories-btn { padding:8px 12px; border-radius:20px; border:1px solid var(--border); background:#fff; font-weight:600; cursor:pointer; font-size:0.9em; }
+        .sync-btn { padding:8px 12px; border-radius:20px; border:1px solid var(--border); background:#e8f5e9; color:var(--correct); font-weight:700; cursor:pointer; font-size:0.9em; display:flex; align-items:center; gap:4px; }
+        .sync-btn:active { background:#c8e6c9; }
+        .nav-tabs { display:flex; gap:4px; background:var(--card-bg); border-radius:var(--radius); padding:5px; margin-bottom:12px; box-shadow:0 2px 12px rgba(60,40,20,0.08); border:1px solid var(--border); flex-wrap:wrap; }
+        .nav-tab { padding:12px 14px; border-radius:10px; cursor:pointer; font-weight:600; font-size:0.95em; border:none; background:transparent; color:#5c4f3a; flex:1; min-width:70px; text-align:center; white-space:nowrap; transition:0.2s; }
+        .nav-tab.active { background:var(--accent); color:#fff; }
+        .main-content { background:var(--card-bg); border-radius:var(--radius); padding:18px 16px; box-shadow:0 2px 12px rgba(60,40,20,0.08); border:1px solid var(--border); min-height:400px; }
+        .question-card { border:1px solid var(--border); border-radius:12px; padding:18px 16px; margin-bottom:14px; background:#fffef9; transition:0.2s; }
+        .question-card.correct-card { border-left:5px solid var(--correct); background:#f0f9f0; }
+        .question-card.wrong-card { border-left:5px solid var(--wrong); background:var(--wrong-bg); }
+        .q-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .q-number { font-weight:700; color:var(--accent); background:#f8f0e4; padding:4px 12px; border-radius:14px; }
+        .q-type { font-size:0.8em; background:#f0ebe0; padding:3px 10px; border-radius:10px; }
+        .q-text { font-weight:600; font-size:1.05em; margin-bottom:12px; line-height:1.5; }
+        .options { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+        .option { padding:14px 14px; border-radius:10px; border:2px solid var(--border); background:#fdfcf7; display:flex; align-items:center; gap:10px; font-size:1em; min-height:50px; transition:0.15s; cursor:pointer; }
+        .option:active { background:#f0e8d8; border-color:var(--accent); }
+        .option.selected { border-color:var(--accent); background:#fdf3e4; font-weight:600; }
+        .option.correct-answer { border-color:var(--correct)!important; background:#e0f2e0!important; }
+        .option.wrong-answer { border-color:var(--wrong)!important; background:#ffe8e5!important; }
+        .opt-letter { font-weight:700; color:var(--accent); min-width:24px; text-align:center; font-size:1.1em; }
+        .feedback { padding:10px 12px; border-radius:8px; font-weight:600; margin-bottom:10px; display:none; }
+        .feedback.show { display:block; }
+        .feedback.correct-fb { background:#e0f2e0; color:#2d5a3b; }
+        .feedback.wrong-fb { background:#ffe8e5; color:#7b2d2d; }
+        .confirm-btn, .copy-btn { padding:12px 18px; border-radius:24px; font-weight:700; font-size:1em; border:2px solid var(--accent); background:#fff; color:var(--accent); cursor:pointer; min-width:130px; text-align:center; }
+        .confirm-btn { background:var(--correct); color:#fff; border:none; margin-bottom:10px; }
+        .nav-buttons { display:flex; justify-content:center; gap:12px; margin-top:18px; flex-wrap:wrap; }
+        .nav-btn { padding:12px 20px; border-radius:24px; font-weight:700; border:2px solid var(--border); background:#fff; cursor:pointer; min-width:80px; }
+        .btn-primary-nav { background:var(--accent); color:#fff; border:none; }
+        .import-area textarea { width:100%; min-height:150px; border:1px solid var(--border); border-radius:10px; padding:14px; font-family:var(--font); font-size:0.95em; }
+        .toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:12px 24px; border-radius:24px; font-weight:600; z-index:999; opacity:0; transition:0.3s; }
+        .toast.show { opacity:1; }
+        .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); display:flex; justify-content:center; align-items:center; z-index:200; }
+        .modal-content { background:#fff; border-radius:16px; padding:20px; max-width:400px; width:90%; }
+        .practice-mode-switch { display:flex; justify-content:center; gap:12px; margin-bottom:14px; }
+        .practice-mode-btn { padding:10px 18px; border-radius:24px; border:2px solid var(--border); background:#fff; font-weight:600; cursor:pointer; transition:0.2s; }
+        .practice-mode-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .auto-sync-row { display:flex; align-items:center; gap:10px; margin:10px 0; font-size:0.9em; }
+        .auto-sync-row input[type=checkbox] { width:20px; height:20px; }
+        button { touch-action:manipulation; cursor:pointer; }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="header">
-        <div class="logo">📚在线练习</div>
+        <div class="logo">📚 中医题库</div>
         <div class="category-selector" id="categoryContainer"></div>
         <button class="manage-categories-btn" id="manageBtn">⚙️ 类别</button>
-        <button class="manage-categories-btn" id="syncBtn" style="margin-left:auto;">☁️ 同步</button>
+        <button class="sync-btn" id="syncBtn"><span>☁️</span> 同步</button>
     </div>
     <div class="nav-tabs">
         <button class="nav-tab active" data-tab="practice">📖 练习</button>
         <button class="nav-tab" data-tab="wrongbook">📕 错题</button>
         <button class="nav-tab" data-tab="import">📥 导入</button>
-        <button class="nav-tab" data-tab="export">📤 导出</button>
+        <button class="nav-tab" data-tab="export">📤 高级</button>
         <button class="nav-tab" data-tab="allQuestions">📋 全部</button>
     </div>
     <div class="main-content" id="mainContent"></div>
@@ -150,6 +87,7 @@
     const SETTINGS_KEY = 'tcm_settings_v2';
     const TOKEN_KEY = 'github_token';
     const GIST_ID_KEY = 'tcm_gist_id';
+    const AUTO_SYNC_KEY = 'tcm_auto_sync';
 
     let categories = [];
     let questions = [];
@@ -159,40 +97,35 @@
     let practiceMode = 'all';
     let shuffledOrder = [], randomIndex = 0;
     let tempSelection = {};
+    let autoSyncEnabled = false;
 
     function loadData() {
         try { categories = JSON.parse(localStorage.getItem(CAT_KEY)) || []; } catch(e) { categories = []; }
-        if(!categories.length) {
-            categories = [{id: 'default', name: '中医基础'}];
-            saveCategories();
-        }
+        if(!categories.length) { categories = [{id: 'default', name: '中医基础'}]; saveCategories(); }
         try { questions = JSON.parse(localStorage.getItem(Q_KEY)) || []; } catch(e) { questions = []; }
         try { wrongCounts = JSON.parse(localStorage.getItem(WRONG_KEY)) || {}; } catch(e) { wrongCounts = {}; }
         const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
         if(settings.currentCategoryId) currentCategoryId = settings.currentCategoryId;
+        autoSyncEnabled = localStorage.getItem(AUTO_SYNC_KEY) === 'true';
     }
     function saveCategories() { localStorage.setItem(CAT_KEY, JSON.stringify(categories)); }
     function saveQuestions() { localStorage.setItem(Q_KEY, JSON.stringify(questions)); }
     function saveWrongCounts() { localStorage.setItem(WRONG_KEY, JSON.stringify(wrongCounts)); }
     function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify({currentCategoryId})); }
+    function saveAutoSync() { localStorage.setItem(AUTO_SYNC_KEY, autoSyncEnabled); }
 
     function getWrongCount(qId) { return wrongCounts[qId] || 0; }
     function incrementWrong(qId) { wrongCounts[qId] = (wrongCounts[qId]||0)+1; saveWrongCounts(); }
-
-    function getQuestionsByCategory(catId) {
-        return catId === 'all' ? questions : questions.filter(q => q.categoryId === catId);
-    }
+    function getQuestionsByCategory(catId) { return catId === 'all' ? questions : questions.filter(q => q.categoryId === catId); }
     function getPracticePool() {
         const allCat = getQuestionsByCategory(currentCategoryId);
         return practiceMode === 'wrong' ? allCat.filter(q => (wrongCounts[q.id]||0) > 0) : allCat;
     }
-
     function shuffleArray(arr) { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]; } return a; }
     function initRandomOrder() {
         const pool = getPracticePool();
         shuffledOrder = shuffleArray(pool.map(q => q.id));
-        randomIndex = 0;
-        tempSelection = {};
+        randomIndex = 0; tempSelection = {};
     }
     function getCurrentQuestion() {
         const pool = getPracticePool();
@@ -212,6 +145,7 @@
         clearTimeout(t._timeout); t._timeout = setTimeout(()=>t.classList.remove('show'), 2000);
     }
 
+    // 类别渲染
     function renderCategories() {
         const container = document.getElementById('categoryContainer');
         container.innerHTML = '';
@@ -229,24 +163,59 @@
         });
     }
     function switchCategory(catId) {
-        currentCategoryId = catId;
-        saveSettings();
-        renderCategories();
-        initRandomOrder();
-        renderMainContent();
+        currentCategoryId = catId; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent();
     }
 
+    // 上传函数（供一键同步和自动同步调用）
+    async function doUpload() {
+        const token = getGistToken();
+        if(!token) { showToast('请先设置 GitHub Token'); return false; }
+        const data = { categories, questions, wrongCounts };
+        const gistId = localStorage.getItem(GIST_ID_KEY);
+        const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
+        const method = gistId ? 'PATCH' : 'POST';
+        try {
+            const res = await fetch(url, {
+                method, headers: { 'Authorization':`token ${token}`, 'Content-Type':'application/json' },
+                body: JSON.stringify({ description:'中医题库备份', public:false, files:{'tcm_data.json':{content:JSON.stringify(data)}} })
+            });
+            const json = await res.json();
+            if(json.id) { localStorage.setItem(GIST_ID_KEY, json.id); return true; }
+            else { console.error(json); return false; }
+        } catch(e) { return false; }
+    }
+
+    // 一键上传并提示
+    async function syncNow() {
+        showToast('☁️ 正在同步...');
+        const success = await doUpload();
+        if(success) showToast('✅ 同步成功');
+        else showToast('❌ 同步失败，请检查网络和 Token');
+    }
+
+    // 自动同步（带防抖）
+    let autoSyncTimer = null;
+    function triggerAutoSync() {
+        if(!autoSyncEnabled) return;
+        clearTimeout(autoSyncTimer);
+        autoSyncTimer = setTimeout(async () => {
+            const success = await doUpload();
+            if(success) console.log('自动同步完成');
+        }, 1000);
+    }
+
+    // 渲染练习页
     function renderPracticeMode() {
         const pool = getPracticePool();
         if(!pool.length) {
-            return `<div class="empty-state" style="text-align:center; padding:30px;">${practiceMode==='wrong'?'📭 暂无错题':'📭 暂无题目'}</div>
+            return `<div class="empty-state" style="text-align:center;padding:30px;">${practiceMode==='wrong'?'📭 暂无错题':'📭 暂无题目'}</div>
             <div class="practice-mode-switch">
                 <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
                 <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
             </div>`;
         }
         const q = getCurrentQuestion();
-        if(!q) return `<div class="empty-state" style="text-align:center; padding:30px;">🎉 本轮完成</div>
+        if(!q) return `<div class="empty-state" style="text-align:center;padding:30px;">🎉 本轮完成</div>
             <button class="nav-btn" onclick="window._restartRound()">重新开始</button>
             <div class="practice-mode-switch">
                 <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
@@ -278,6 +247,9 @@
             <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
             <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
         </div>
+        <div class="auto-sync-row">
+            <label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步到云端</label>
+        </div>
         <div class="question-card" id="qcard">
             <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">${q.type==='multi'?'多选':'单选'}</span></div>
             <div class="q-text">${q.q}</div>
@@ -286,7 +258,7 @@
             ${feedbackHTML}
             <button class="copy-btn" id="copyBtn">📋 复制到AI解析</button>
         </div>
-        <div style="text-align:center; margin:8px;">${randomIndex+1}/${shuffledOrder.length}</div>
+        <div style="text-align:center;margin:8px;">${randomIndex+1}/${shuffledOrder.length}</div>
         <div class="nav-buttons">
             <button class="nav-btn" id="prevBtn" ${randomIndex===0?'disabled':''}>◀ 上一题</button>
             <button class="nav-btn btn-primary-nav" id="nextBtn">下一题 ▶</button>
@@ -296,13 +268,13 @@
 
     function renderWrongBook() {
         const wrongIds = Object.keys(wrongCounts).filter(id => wrongCounts[id] > 0).map(Number);
-        if(!wrongIds.length) return '<div class="empty-state" style="text-align:center; padding:30px;">📕 错题本为空</div>';
+        if(!wrongIds.length) return '<div class="empty-state" style="text-align:center;padding:30px;">📕 错题本为空</div>';
         const pool = getQuestionsByCategory(currentCategoryId);
         const qs = wrongIds.map(id => pool.find(q => q.id === id)).filter(Boolean);
-        if(!qs.length) return '<div class="empty-state" style="text-align:center; padding:30px;">当前类别没有错题</div>';
-        let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        if(!qs.length) return '<div class="empty-state" style="text-align:center;padding:30px;">当前类别没有错题</div>';
+        let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
             <b>错题本 (${qs.length})</b>
-            <button class="nav-btn" id="clearWrongBtn" style="color:#d4685c; border-color:#d4685c;">清空当前</button>
+            <button class="nav-btn" id="clearWrongBtn" style="color:#d4685c;border-color:#d4685c;">清空当前</button>
         </div>`;
         qs.forEach(q => {
             const labels = ['A','B','C','D','E'];
@@ -313,10 +285,7 @@
                 return `<div class="${cls}"><span class="opt-letter">${letter}</span>${opt}</div>`;
             }).join('');
             html += `<div class="question-card" style="background:#fef9f5;">
-                <div class="q-header">
-                    <span class="q-number">#${q.id} 错过${getWrongCount(q.id)}次</span>
-                    <button class="remove-wrong-btn" data-qid="${q.id}" title="移除此错题">✕</button>
-                </div>
+                <div class="q-header"><span class="q-number">#${q.id} 错过${getWrongCount(q.id)}次</span><button class="nav-btn remove-wrong-btn" data-qid="${q.id}" style="color:red;border:none;background:none;">✕</button></div>
                 <div class="q-text">${q.q}</div>
                 <div class="options">${optsHTML}</div>
                 <div class="feedback correct-fb show">✅ 答案：${q.ans}</div>
@@ -330,17 +299,16 @@
         if(!pool.length) return '<div class="empty-state">暂无题目</div>';
         return `<div><b>全部题目 (${pool.length})</b></div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-            ${pool.map(q => `<span class="nav-btn" style="min-width:auto; padding:8px 14px;" onclick="window._jumpToQuestion(${q.id})">#${q.id}</span>`).join('')}
+            ${pool.map(q => `<span class="nav-btn" style="min-width:auto;padding:8px 14px;" onclick="window._jumpToQuestion(${q.id})">#${q.id}</span>`).join('')}
         </div>`;
     }
 
     function renderImportMode() {
         const catOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-        return `<div>
-            <label>导入到类别：</label>
-            <select id="importCategory" style="padding:8px; border-radius:8px; border:1px solid var(--border);">${catOptions}</select>
+        return `<div><label>导入到类别：</label>
+            <select id="importCategory" style="padding:8px;border-radius:8px;border:1px solid var(--border);">${catOptions}</select>
             <div class="import-area" style="margin-top:12px;">
-                <textarea id="importTextarea" placeholder="支持格式：A.选项 B.选项 ... 或 A) 选项 ... 或 JSON"></textarea>
+                <textarea id="importTextarea" placeholder="支持：A.选项 B.选项 或 A) 选项 或 JSON"></textarea>
                 <button class="nav-btn" id="importBtn" style="margin-top:10px;">解析并导入</button>
                 <div id="importResult" style="margin-top:10px;"></div>
             </div>
@@ -349,28 +317,17 @@
 
     function renderExportMode() {
         const token = getGistToken();
-        const tokenStatus = token ? '✅ Token 已保存（已隐藏）' : '⚠️ 尚未保存 Token';
+        const tokenStatus = token ? '✅ Token 已保存' : '⚠️ 未设置 Token';
         return `<div>
-            <h3>📤 导出数据</h3>
-            <p style="margin:12px 0;">将全部题库和错题记录导出为一个 JSON 文件，可在其他设备导入。</p>
+            <h3>📤 高级选项</h3>
             <button class="nav-btn" id="exportBtn">⬇️ 导出全部数据</button>
+            <button class="nav-btn" id="downloadGistBtn" style="margin-left:10px;">☁️ 从云端下载</button>
             <div style="margin-top:20px;">
-                <h3>☁️ 云同步设置 (GitHub Gist)</h3>
-                <p style="font-size:0.9em; color:#5c4f3a;">
-                    使用 GitHub Personal Access Token 将数据同步到您的私有 Gist。<br>
-                    <a href="https://github.com/settings/tokens" target="_blank">生成 Token</a> 时勾选 <b>gist</b> 权限。
-                </p>
-                <div style="margin-top:8px;">
-                    <label>Token:</label>
-                    <input type="password" id="tokenInput" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
-                    <div style="font-size:0.85em; margin-top:4px; color:${token ? 'var(--correct)' : '#d4685c'};">${tokenStatus}</div>
-                </div>
+                <h4>🔑 GitHub Token 设置</h4>
+                <input type="password" id="tokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
+                <div style="font-size:0.85em;margin-top:4px;color:${token?'var(--correct)':'#d4685c'};">${tokenStatus}</div>
                 <button class="nav-btn" id="saveTokenBtn" style="margin-top:8px;">💾 保存 Token</button>
-                <div style="display:flex; gap:10px; margin-top:12px;">
-                    <button class="nav-btn" id="uploadGistBtn">☁️ 上传到云端</button>
-                    <button class="nav-btn" id="downloadGistBtn">☁️ 从云端下载</button>
-                </div>
-                <div id="syncStatus" style="margin-top:10px; font-size:0.9em;"></div>
+                <p style="margin-top:10px;font-size:0.9em;color:#5c4f3a;"><a href="https://github.com/settings/tokens" target="_blank">生成 Token</a>，勾选 <b>gist</b> 权限。</p>
             </div>
         </div>`;
     }
@@ -399,6 +356,7 @@
                 setTempSelection(qId, letter);
                 q._confirmed = true;
                 if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId);
+                triggerAutoSync();
                 renderMainContent();
             } else {
                 let arr = getTempSelection(qId).split('').filter(Boolean);
@@ -414,6 +372,7 @@
             if(!q || q._confirmed) return;
             q._confirmed = true;
             if(normalizeAnswer(getTempSelection(q.id)) !== normalizeAnswer(q.ans)) incrementWrong(q.id);
+            triggerAutoSync();
             renderMainContent();
             return;
         }
@@ -427,8 +386,14 @@
         if(e.target.id === 'clearWrongBtn') { window._clearWrongBook(); return; }
         if(e.target.id === 'exportBtn') { window._exportData(); return; }
         if(e.target.id === 'saveTokenBtn') { window._saveToken(); return; }
-        if(e.target.id === 'uploadGistBtn') { window._uploadToGist(); return; }
         if(e.target.id === 'downloadGistBtn') { window._downloadFromGist(); return; }
+        // 自动同步开关
+        if(e.target.id === 'autoSyncCheck') {
+            autoSyncEnabled = e.target.checked;
+            saveAutoSync();
+            showToast(autoSyncEnabled ? '已开启自动同步' : '已关闭自动同步');
+            return;
+        }
         // 单题移除错题
         const removeBtn = e.target.closest('.remove-wrong-btn');
         if(removeBtn) {
@@ -469,7 +434,7 @@
         saveWrongCounts(); renderMainContent();
     };
 
-    // 改进的导入解析
+    // 导入解析
     window._batchImport = function() {
         const text = document.getElementById('importTextarea')?.value.trim();
         const res = document.getElementById('importResult');
@@ -519,25 +484,11 @@
         URL.revokeObjectURL(url); showToast('导出成功');
     };
 
-    // GitHub Gist 同步
+    // Token 相关
     function getGistToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
     window._saveToken = function() {
         const token = document.getElementById('tokenInput').value.trim();
         if(token) { localStorage.setItem(TOKEN_KEY, token); showToast('Token 已保存'); renderMainContent(); }
-    };
-    window._uploadToGist = async function() {
-        const token = getGistToken();
-        if(!token) { showToast('请先保存 Token'); return; }
-        const data = { categories, questions, wrongCounts };
-        const gistId = localStorage.getItem(GIST_ID_KEY);
-        const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
-        const method = gistId ? 'PATCH' : 'POST';
-        try {
-            const res = await fetch(url, { method, headers: { 'Authorization':`token ${token}`, 'Content-Type':'application/json' }, body: JSON.stringify({ description:'中医题库备份', public:false, files:{'tcm_data.json':{content:JSON.stringify(data)}} }) });
-            const json = await res.json();
-            if(json.id) { localStorage.setItem(GIST_ID_KEY, json.id); showToast('☁️ 上传成功'); }
-            else showToast('上传失败: '+JSON.stringify(json));
-        } catch(e) { showToast('网络错误'); }
     };
     window._downloadFromGist = async function() {
         const token = getGistToken();
@@ -558,16 +509,43 @@
         } catch(e) { showToast('网络错误'); }
     };
 
+    // 一键同步按钮
+    document.getElementById('syncBtn').addEventListener('click', () => {
+        const token = getGistToken();
+        if(!token) {
+            // 弹出输入 Token 的小窗口
+            let modal = document.querySelector('.modal'); if(modal) modal.remove();
+            modal = document.createElement('div'); modal.className='modal';
+            modal.innerHTML = `<div class="modal-content">
+                <h3>设置 GitHub Token</h3>
+                <input type="password" id="quickTokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx">
+                <div style="margin-top:10px;display:flex;gap:10px;">
+                    <button class="nav-btn" id="quickSaveToken">保存并同步</button>
+                    <button class="nav-btn" id="cancelQuick">取消</button>
+                </div>
+            </div>`;
+            document.body.appendChild(modal);
+            document.getElementById('quickSaveToken').addEventListener('click', async () => {
+                const newToken = document.getElementById('quickTokenInput').value.trim();
+                if(newToken) { localStorage.setItem(TOKEN_KEY, newToken); modal.remove(); await syncNow(); }
+                else showToast('请输入 Token');
+            });
+            document.getElementById('cancelQuick').addEventListener('click', ()=> modal.remove());
+            return;
+        }
+        syncNow();
+    });
+
     // 类别管理
     document.getElementById('manageBtn').addEventListener('click', ()=>{
         let modal = document.querySelector('.modal'); if(modal) modal.remove();
         modal = document.createElement('div'); modal.className='modal';
         modal.innerHTML = `<div class="modal-content"><h3>管理类别</h3>
-            <ul style="list-style:none; padding:0; margin:14px 0;">
-                ${categories.map(c=>`<li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;"><span>${c.name}</span><button class="delete-cat" data-id="${c.id}" style="color:red; background:none; border:none; font-size:1.2em;">✕</button></li>`).join('')}
+            <ul style="list-style:none;padding:0;margin:14px 0;">
+                ${categories.map(c=>`<li style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;"><span>${c.name}</span><button class="delete-cat" data-id="${c.id}" style="color:red;background:none;border:none;font-size:1.2em;">✕</button></li>`).join('')}
             </ul>
-            <div style="display:flex; gap:8px;"><input id="newCatName" placeholder="新类别" style="flex:1; padding:8px; border-radius:8px; border:1px solid #ccc;"><button id="addCatBtn" class="nav-btn">添加</button></div>
-            <button id="closeModal" class="nav-btn" style="margin-top:12px; width:100%;">关闭</button></div>`;
+            <div style="display:flex;gap:8px;"><input id="newCatName" placeholder="新类别" style="flex:1;padding:8px;border-radius:8px;border:1px solid #ccc;"><button id="addCatBtn" class="nav-btn">添加</button></div>
+            <button id="closeModal" class="nav-btn" style="margin-top:12px;width:100%;">关闭</button></div>`;
         document.body.appendChild(modal);
         document.getElementById('addCatBtn').addEventListener('click', ()=>{
             const name = document.getElementById('newCatName').value.trim();
@@ -580,12 +558,7 @@
         document.getElementById('closeModal').addEventListener('click', ()=>modal.remove());
     });
 
-    document.getElementById('syncBtn').addEventListener('click', ()=>{
-        document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-        document.querySelector('[data-tab="export"]').classList.add('active');
-        currentTab='export'; renderMainContent();
-    });
-
+    // 标签切换
     document.querySelectorAll('.nav-tab').forEach(tab=>{ tab.addEventListener('click', function(){
         document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
         this.classList.add('active'); currentTab=this.dataset.tab;
