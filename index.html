@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title在线练习系统</title>
+    <title>在线练习系统</title>
     <style>
         :root {
             --bg: #f5f0eb;
@@ -117,13 +117,17 @@
             background: #fff; font-weight: 600; cursor: pointer; transition: 0.2s;
         }
         .practice-mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .remove-wrong-btn {
+            background: none; border: none; color: var(--wrong); font-size: 1.3em;
+            cursor: pointer; padding: 0 8px; line-height: 1; font-weight: bold;
+        }
         button { touch-action: manipulation; cursor: pointer; }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="header">
-        <div class="logo">📚在线练习系统</div>
+        <div class="logo">📚在线练习</div>
         <div class="category-selector" id="categoryContainer"></div>
         <button class="manage-categories-btn" id="manageBtn">⚙️ 类别</button>
         <button class="manage-categories-btn" id="syncBtn" style="margin-left:auto;">☁️ 同步</button>
@@ -309,7 +313,10 @@
                 return `<div class="${cls}"><span class="opt-letter">${letter}</span>${opt}</div>`;
             }).join('');
             html += `<div class="question-card" style="background:#fef9f5;">
-                <div class="q-header"><span class="q-number">#${q.id} 错过${getWrongCount(q.id)}次</span></div>
+                <div class="q-header">
+                    <span class="q-number">#${q.id} 错过${getWrongCount(q.id)}次</span>
+                    <button class="remove-wrong-btn" data-qid="${q.id}" title="移除此错题">✕</button>
+                </div>
                 <div class="q-text">${q.q}</div>
                 <div class="options">${optsHTML}</div>
                 <div class="feedback correct-fb show">✅ 答案：${q.ans}</div>
@@ -333,19 +340,7 @@
             <label>导入到类别：</label>
             <select id="importCategory" style="padding:8px; border-radius:8px; border:1px solid var(--border);">${catOptions}</select>
             <div class="import-area" style="margin-top:12px;">
-                <textarea id="importTextarea" placeholder="支持以下格式：
-
-1. 题目...
-A) 选项1
-B) 选项2
-参考答案： C
-
-或同一行选项：
-1. 题目...
-A.选项1 B.选项2 C.选项3
-参考答案： B
-
-或 JSON 数组格式"></textarea>
+                <textarea id="importTextarea" placeholder="支持格式：A.选项 B.选项 ... 或 A) 选项 ... 或 JSON"></textarea>
                 <button class="nav-btn" id="importBtn" style="margin-top:10px;">解析并导入</button>
                 <div id="importResult" style="margin-top:10px;"></div>
             </div>
@@ -353,6 +348,8 @@ A.选项1 B.选项2 C.选项3
     }
 
     function renderExportMode() {
+        const token = getGistToken();
+        const tokenStatus = token ? '✅ Token 已保存（已隐藏）' : '⚠️ 尚未保存 Token';
         return `<div>
             <h3>📤 导出数据</h3>
             <p style="margin:12px 0;">将全部题库和错题记录导出为一个 JSON 文件，可在其他设备导入。</p>
@@ -365,7 +362,8 @@ A.选项1 B.选项2 C.选项3
                 </p>
                 <div style="margin-top:8px;">
                     <label>Token:</label>
-                    <input type="password" id="tokenInput" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx">
+                    <input type="password" id="tokenInput" style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
+                    <div style="font-size:0.85em; margin-top:4px; color:${token ? 'var(--correct)' : '#d4685c'};">${tokenStatus}</div>
                 </div>
                 <button class="nav-btn" id="saveTokenBtn" style="margin-top:8px;">💾 保存 Token</button>
                 <div style="display:flex; gap:10px; margin-top:12px;">
@@ -431,6 +429,16 @@ A.选项1 B.选项2 C.选项3
         if(e.target.id === 'saveTokenBtn') { window._saveToken(); return; }
         if(e.target.id === 'uploadGistBtn') { window._uploadToGist(); return; }
         if(e.target.id === 'downloadGistBtn') { window._downloadFromGist(); return; }
+        // 单题移除错题
+        const removeBtn = e.target.closest('.remove-wrong-btn');
+        if(removeBtn) {
+            const qId = parseInt(removeBtn.dataset.qid);
+            delete wrongCounts[qId];
+            saveWrongCounts();
+            renderMainContent();
+            showToast('已移除该错题');
+            return;
+        }
     });
 
     window._copyToAI = function(qId) {
@@ -461,93 +469,46 @@ A.选项1 B.选项2 C.选项3
         saveWrongCounts(); renderMainContent();
     };
 
-    // ========== 改进的导入解析（支持多种格式）==========
+    // 改进的导入解析
     window._batchImport = function() {
         const text = document.getElementById('importTextarea')?.value.trim();
         const res = document.getElementById('importResult');
         if(!text) { if(res) res.innerHTML='⚠️ 请粘贴文本'; return; }
         const catId = document.getElementById('importCategory')?.value || categories[0]?.id;
         let imported = [];
-
-        // 尝试 JSON 解析
         try {
             const parsed = JSON.parse(text);
             if(Array.isArray(parsed) && parsed.length > 0 && parsed[0].q) {
-                imported = parsed.map(item => ({
-                    ...item,
-                    categoryId: catId,
-                    type: item.type || (item.ans && item.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single')
-                }));
+                imported = parsed.map(item => ({...item, categoryId: catId, type: item.type || (item.ans && item.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single')}));
             }
         } catch(e) {
-            // 文本解析
             const lines = text.split('\n');
             let cur = null, opts = [];
             for(const line of lines) {
                 const trimmed = line.trim();
                 if(!trimmed) continue;
-
-                // 题目行：以数字加点开头，并且不是选项开头
                 const qm = trimmed.match(/^(\d+)[\.\、]\s*(.+)/);
                 if(qm && !/^[A-E][\.\)]\s*/.test(trimmed)) {
-                    if(cur && opts.length >= 2) {
-                        cur.opts = opts;
-                        cur.categoryId = catId;
-                        cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single');
-                        imported.push(cur);
-                    }
-                    cur = { q: qm[2], opts: [], ans: '', type: 'single' };
-                    opts = [];
-                    continue;
+                    if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); }
+                    cur = { q: qm[2], opts: [], ans: '', type: 'single' }; opts = []; continue;
                 }
-
-                // 选项行：支持 A)  A.  A． 等
                 const optSingle = trimmed.match(/^([A-E])[\.\)．]\s*(.+)/);
-                if(optSingle && cur) {
-                    opts.push(optSingle[2]);
-                    continue;
-                }
-
-                // 同一行多个选项：如 A.选项1 B.选项2 ...
+                if(optSingle && cur) { opts.push(optSingle[2]); continue; }
                 const multiOpts = trimmed.match(/([A-E])[\.\)．]\s*([^A-E]+)/g);
                 if(multiOpts && cur && multiOpts.length >= 2) {
-                    multiOpts.forEach(m => {
-                        const match = m.match(/^([A-E])[\.\)．]\s*(.+)/);
-                        if(match) opts.push(match[2].trim());
-                    });
+                    multiOpts.forEach(m => { const match = m.match(/^([A-E])[\.\)．]\s*(.+)/); if(match) opts.push(match[2].trim()); });
                     continue;
                 }
-
-                // 参考答案行
                 const ansMatch = trimmed.match(/^答案[：:]\s*(.+)/) || trimmed.match(/^参考答案[：:]\s*(.+)/);
-                if(ansMatch && cur) {
-                    cur.ans = ansMatch[1].replace(/\s/g,'');
-                    cur.type = cur.ans.length > 1 ? 'multi' : 'single';
-                }
+                if(ansMatch && cur) { cur.ans = ansMatch[1].replace(/\s/g,''); cur.type = cur.ans.length > 1 ? 'multi' : 'single'; }
             }
-            // 处理最后一题
-            if(cur && opts.length >= 2) {
-                cur.opts = opts;
-                cur.categoryId = catId;
-                cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single');
-                imported.push(cur);
-            }
+            if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); }
         }
-
-        if(!imported.length) { if(res) res.innerHTML='❌ 无法解析，请检查格式'; return; }
-
-        // 分配 ID
+        if(!imported.length) { if(res) res.innerHTML='❌ 无法解析'; return; }
         const maxId = questions.reduce((max,q) => Math.max(max,q.id), 0);
-        imported.forEach((q, i) => {
-            if(!q.id) q.id = maxId + i + 1;
-            if(!q.type) q.type = 'single';
-        });
-        questions.push(...imported);
-        saveQuestions();
-        initRandomOrder();
-        renderMainContent();
-        if(res) res.innerHTML = `✅ 成功导入 ${imported.length} 题`;
-        showToast('导入成功');
+        imported.forEach((q,i) => q.id = maxId + i + 1);
+        questions.push(...imported); saveQuestions(); initRandomOrder(); renderMainContent();
+        if(res) res.innerHTML = `✅ 导入 ${imported.length} 题`; showToast('导入成功');
     };
 
     window._exportData = function() {
@@ -555,15 +516,14 @@ A.选项1 B.选项2 C.选项3
         const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href=url; a.download='tcm_backup.json'; a.click();
-        URL.revokeObjectURL(url);
-        showToast('导出成功');
+        URL.revokeObjectURL(url); showToast('导出成功');
     };
 
     // GitHub Gist 同步
     function getGistToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
     window._saveToken = function() {
         const token = document.getElementById('tokenInput').value.trim();
-        if(token) { localStorage.setItem(TOKEN_KEY, token); showToast('Token 已保存'); }
+        if(token) { localStorage.setItem(TOKEN_KEY, token); showToast('Token 已保存'); renderMainContent(); }
     };
     window._uploadToGist = async function() {
         const token = getGistToken();
@@ -573,10 +533,7 @@ A.选项1 B.选项2 C.选项3
         const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
         const method = gistId ? 'PATCH' : 'POST';
         try {
-            const res = await fetch(url, {
-                method, headers: { 'Authorization':`token ${token}`, 'Content-Type':'application/json' },
-                body: JSON.stringify({ description:'中医题库备份', public:false, files:{'tcm_data.json':{content:JSON.stringify(data)}} })
-            });
+            const res = await fetch(url, { method, headers: { 'Authorization':`token ${token}`, 'Content-Type':'application/json' }, body: JSON.stringify({ description:'中医题库备份', public:false, files:{'tcm_data.json':{content:JSON.stringify(data)}} }) });
             const json = await res.json();
             if(json.id) { localStorage.setItem(GIST_ID_KEY, json.id); showToast('☁️ 上传成功'); }
             else showToast('上传失败: '+JSON.stringify(json));
