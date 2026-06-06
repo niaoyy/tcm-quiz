@@ -8,7 +8,7 @@
         :root {
             --bg: #f5f0eb; --card-bg: #fffef9; --text: #2c2416; --accent: #8b5e3c;
             --correct: #4a7c59; --wrong: #d4685c; --wrong-bg: #fef3f0; --border: #e0d5c7;
-            --radius: 14px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            --radius: 14px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.6; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
@@ -64,7 +64,7 @@
 <body>
 <div class="app-container">
     <div class="header">
-        <div class="logo">📚 练习系统</div>
+        <div class="logo">练习系统</div>
         <div class="category-selector" id="categoryContainer"></div>
         <button class="manage-categories-btn" id="manageBtn">⚙️ 类别</button>
         <button class="sync-btn" id="syncBtn"><span>☁️</span> 同步</button>
@@ -145,7 +145,41 @@
         clearTimeout(t._timeout); t._timeout = setTimeout(()=>t.classList.remove('show'), 2000);
     }
 
-    // 类别渲染
+    async function doUpload() {
+        const token = getGistToken();
+        if(!token) { showToast('请先设置 GitHub Token'); return false; }
+        const data = { categories, questions, wrongCounts };
+        const gistId = localStorage.getItem(GIST_ID_KEY);
+        const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
+        const method = gistId ? 'PATCH' : 'POST';
+        try {
+            const res = await fetch(url, {
+                method, headers: { 'Authorization':`token ${token}`, 'Content-Type':'application/json' },
+                body: JSON.stringify({ description:'练习系统备份', public:false, files:{'tcm_data.json':{content:JSON.stringify(data)}} })
+            });
+            const json = await res.json();
+            if(json.id) { localStorage.setItem(GIST_ID_KEY, json.id); return true; }
+            else { console.error(json); return false; }
+        } catch(e) { return false; }
+    }
+
+    async function syncNow() {
+        showToast('☁️ 正在同步...');
+        const success = await doUpload();
+        if(success) showToast('✅ 同步成功');
+        else showToast('❌ 同步失败，请检查网络和 Token');
+    }
+
+    let autoSyncTimer = null;
+    function triggerAutoSync() {
+        if(!autoSyncEnabled) return;
+        clearTimeout(autoSyncTimer);
+        autoSyncTimer = setTimeout(async () => {
+            const success = await doUpload();
+            if(success) console.log('自动同步完成');
+        }, 1000);
+    }
+
     function renderCategories() {
         const container = document.getElementById('categoryContainer');
         container.innerHTML = '';
@@ -166,45 +200,6 @@
         currentCategoryId = catId; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent();
     }
 
-    // 上传函数（供一键同步和自动同步调用）
-    async function doUpload() {
-        const token = getGistToken();
-        if(!token) { showToast('请先设置 GitHub Token'); return false; }
-        const data = { categories, questions, wrongCounts };
-        const gistId = localStorage.getItem(GIST_ID_KEY);
-        const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
-        const method = gistId ? 'PATCH' : 'POST';
-        try {
-            const res = await fetch(url, {
-                method, headers: { 'Authorization':`token ${token}`, 'Content-Type':'application/json' },
-                body: JSON.stringify({ description:'中医题库备份', public:false, files:{'tcm_data.json':{content:JSON.stringify(data)}} })
-            });
-            const json = await res.json();
-            if(json.id) { localStorage.setItem(GIST_ID_KEY, json.id); return true; }
-            else { console.error(json); return false; }
-        } catch(e) { return false; }
-    }
-
-    // 一键上传并提示
-    async function syncNow() {
-        showToast('☁️ 正在同步...');
-        const success = await doUpload();
-        if(success) showToast('✅ 同步成功');
-        else showToast('❌ 同步失败，请检查网络和 Token');
-    }
-
-    // 自动同步（带防抖）
-    let autoSyncTimer = null;
-    function triggerAutoSync() {
-        if(!autoSyncEnabled) return;
-        clearTimeout(autoSyncTimer);
-        autoSyncTimer = setTimeout(async () => {
-            const success = await doUpload();
-            if(success) console.log('自动同步完成');
-        }, 1000);
-    }
-
-    // 渲染练习页
     function renderPracticeMode() {
         const pool = getPracticePool();
         if(!pool.length) {
@@ -246,6 +241,7 @@
         return `<div class="practice-mode-switch">
             <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
             <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
+        </div>
         <div class="question-card" id="qcard">
             <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">${q.type==='multi'?'多选':'单选'}</span></div>
             <div class="q-text">${q.q}</div>
@@ -312,31 +308,16 @@
     }
 
     function renderExportMode() {
-    const token = getGistToken();
-    const tokenStatus = token ? '✅ Token 已保存' : '⚠️ 未设置 Token';
-    return `<div>
-        <h3>📤 导出与同步</h3>
-        <button class="nav-btn" id="exportBtn">⬇️ 导出全部数据</button>
-        <button class="nav-btn" id="downloadGistBtn" style="margin-left:10px;">☁️ 从云端下载</button>
-        <div class="auto-sync-row" style="margin:16px 0;">
-            <label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步到云端</label>
-            <span style="font-size:0.85em;color:#5c4f3a;">（答完题自动上传，无需手动操作）</span>
-        </div>
-        <div style="margin-top:20px;">
-            <h4>🔑 GitHub Token 设置</h4>
-            <input type="password" id="tokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
-            <div style="font-size:0.85em;margin-top:4px;color:${token?'var(--correct)':'#d4685c'};">${tokenStatus}</div>
-            <button class="nav-btn" id="saveTokenBtn" style="margin-top:8px;">💾 保存 Token</button>
-            <p style="margin-top:10px;font-size:0.9em;color:#5c4f3a;"><a href="https://github.com/settings/tokens" target="_blank">生成 Token</a>，勾选 <b>gist</b> 权限。</p>
-        </div>
-    </div>`;
-} {
         const token = getGistToken();
         const tokenStatus = token ? '✅ Token 已保存' : '⚠️ 未设置 Token';
         return `<div>
-            <h3>📤 高级选项</h3>
+            <h3>📤 导出与同步</h3>
             <button class="nav-btn" id="exportBtn">⬇️ 导出全部数据</button>
             <button class="nav-btn" id="downloadGistBtn" style="margin-left:10px;">☁️ 从云端下载</button>
+            <div class="auto-sync-row" style="margin:16px 0;">
+                <label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步到云端</label>
+                <span style="font-size:0.85em;color:#5c4f3a;">（答完题自动上传）</span>
+            </div>
             <div style="margin-top:20px;">
                 <h4>🔑 GitHub Token 设置</h4>
                 <input type="password" id="tokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
@@ -358,7 +339,6 @@
         }
     }
 
-    // 事件委托
     document.getElementById('mainContent').addEventListener('click', function(e) {
         const optionEl = e.target.closest('.option[data-action="toggle"]');
         if(optionEl) {
@@ -402,14 +382,12 @@
         if(e.target.id === 'exportBtn') { window._exportData(); return; }
         if(e.target.id === 'saveTokenBtn') { window._saveToken(); return; }
         if(e.target.id === 'downloadGistBtn') { window._downloadFromGist(); return; }
-        // 自动同步开关
         if(e.target.id === 'autoSyncCheck') {
             autoSyncEnabled = e.target.checked;
             saveAutoSync();
             showToast(autoSyncEnabled ? '已开启自动同步' : '已关闭自动同步');
             return;
         }
-        // 单题移除错题
         const removeBtn = e.target.closest('.remove-wrong-btn');
         if(removeBtn) {
             const qId = parseInt(removeBtn.dataset.qid);
@@ -449,7 +427,6 @@
         saveWrongCounts(); renderMainContent();
     };
 
-    // 导入解析
     window._batchImport = function() {
         const text = document.getElementById('importTextarea')?.value.trim();
         const res = document.getElementById('importResult');
@@ -499,7 +476,6 @@
         URL.revokeObjectURL(url); showToast('导出成功');
     };
 
-    // Token 相关
     function getGistToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
     window._saveToken = function() {
         const token = document.getElementById('tokenInput').value.trim();
@@ -524,11 +500,9 @@
         } catch(e) { showToast('网络错误'); }
     };
 
-    // 一键同步按钮
     document.getElementById('syncBtn').addEventListener('click', () => {
         const token = getGistToken();
         if(!token) {
-            // 弹出输入 Token 的小窗口
             let modal = document.querySelector('.modal'); if(modal) modal.remove();
             modal = document.createElement('div'); modal.className='modal';
             modal.innerHTML = `<div class="modal-content">
@@ -551,7 +525,6 @@
         syncNow();
     });
 
-    // 类别管理
     document.getElementById('manageBtn').addEventListener('click', ()=>{
         let modal = document.querySelector('.modal'); if(modal) modal.remove();
         modal = document.createElement('div'); modal.className='modal';
@@ -573,7 +546,6 @@
         document.getElementById('closeModal').addEventListener('click', ()=>modal.remove());
     });
 
-    // 标签切换
     document.querySelectorAll('.nav-tab').forEach(tab=>{ tab.addEventListener('click', function(){
         document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
         this.classList.add('active'); currentTab=this.dataset.tab;
