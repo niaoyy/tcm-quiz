@@ -39,6 +39,9 @@
         .option.correct-answer { border-color:var(--correct)!important; background:#e0f2e0!important; }
         .option.wrong-answer { border-color:var(--wrong)!important; background:#ffe8e5!important; }
         .opt-letter { font-weight:700; color:var(--accent); min-width:24px; text-align:center; font-size:1.1em; }
+        .fill-input { width:100%; padding:12px; border:2px solid var(--border); border-radius:10px; font-size:1em; background:#fdfcf7; margin-bottom:12px; }
+        .fill-input.correct-input { border-color:var(--correct)!important; background:#e0f2e0!important; }
+        .fill-input.wrong-input { border-color:var(--wrong)!important; background:#ffe8e5!important; }
         .feedback { padding:10px 12px; border-radius:8px; font-weight:600; margin-bottom:10px; display:none; }
         .feedback.show { display:block; }
         .feedback.correct-fb { background:#e0f2e0; color:#2d5a3b; }
@@ -116,11 +119,13 @@
 
     function getWrongCount(qId) { return wrongCounts[qId] || 0; }
     function incrementWrong(qId) { wrongCounts[qId] = (wrongCounts[qId]||0)+1; saveWrongCounts(); }
+
     function getQuestionsByCategory(catId) { return catId === 'all' ? questions : questions.filter(q => q.categoryId === catId); }
     function getPracticePool() {
         const allCat = getQuestionsByCategory(currentCategoryId);
         return practiceMode === 'wrong' ? allCat.filter(q => (wrongCounts[q.id]||0) > 0) : allCat;
     }
+
     function shuffleArray(arr) { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]; } return a; }
     function initRandomOrder() {
         const pool = getPracticePool();
@@ -167,7 +172,7 @@
         showToast('☁️ 正在同步...');
         const success = await doUpload();
         if(success) showToast('✅ 同步成功');
-        else showToast('❌ 同步失败，请检查网络和 Token');
+        else showToast('❌ 同步失败');
     }
 
     let autoSyncTimer = null;
@@ -218,6 +223,39 @@
             </div>`;
         const sel = getTempSelection(q.id);
         const confirmed = q._confirmed;
+        const catName = categories.find(c=>c.id===q.categoryId)?.name || '';
+
+        // 填空题渲染
+        if(q.type === 'fill') {
+            let inputHTML = `<input type="text" class="fill-input ${confirmed ? (sel.trim() === q.ans.trim() ? 'correct-input' : 'wrong-input') : ''}" 
+                id="fillAnswer" value="${sel}" placeholder="请输入答案" ${confirmed ? 'disabled' : ''}>`;
+            let confirmBtnHTML = !confirmed ? '<button class="confirm-btn" id="confirmFillBtn">✅ 确认答案</button>' : '';
+            let feedbackHTML = '';
+            if(confirmed) {
+                const correct = sel.trim() === q.ans.trim();
+                feedbackHTML = correct ? '<div class="feedback correct-fb show">✅ 正确！</div>' : `<div class="feedback wrong-fb show">❌ 错误。标准答案：${q.ans}</div>`;
+            }
+            return `<div class="practice-mode-switch">
+                <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
+                <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
+            </div>
+            <div class="question-card" id="qcard">
+                <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">填空题</span></div>
+                <div class="q-text">${q.q}</div>
+                ${inputHTML}
+                ${confirmBtnHTML}
+                ${feedbackHTML}
+                <button class="copy-btn" id="copyBtn">📋 复制到AI解析</button>
+            </div>
+            <div style="text-align:center;margin:8px;">${randomIndex+1}/${shuffledOrder.length}</div>
+            <div class="nav-buttons">
+                <button class="nav-btn" id="prevBtn" ${randomIndex===0?'disabled':''}>◀ 上一题</button>
+                <button class="nav-btn btn-primary-nav" id="nextBtn">下一题 ▶</button>
+                <button class="nav-btn" id="jumpBtn">🔀 随机跳题</button>
+            </div>`;
+        }
+
+        // 单选题/多选题渲染
         const labels = ['A','B','C','D','E'];
         let optsHTML = q.opts.map((opt,i)=>{
             const letter = labels[i];
@@ -237,7 +275,6 @@
             const correct = normalizeAnswer(sel)===normalizeAnswer(q.ans);
             feedbackHTML = correct ? '<div class="feedback correct-fb show">✅ 正确！</div>' : '<div class="feedback wrong-fb show">❌ 错误。答案：'+q.ans+'</div>';
         }
-        const catName = categories.find(c=>c.id===q.categoryId)?.name || '';
         return `<div class="practice-mode-switch">
             <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
             <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
@@ -269,6 +306,14 @@
             <button class="nav-btn" id="clearWrongBtn" style="color:#d4685c;border-color:#d4685c;">清空当前</button>
         </div>`;
         qs.forEach(q => {
+            if(q.type === 'fill') {
+                html += `<div class="question-card" style="background:#fef9f5;">
+                    <div class="q-header"><span class="q-number">#${q.id} 错过${getWrongCount(q.id)}次</span><button class="nav-btn remove-wrong-btn" data-qid="${q.id}" style="color:red;border:none;background:none;">✕</button></div>
+                    <div class="q-text">${q.q}</div>
+                    <div class="feedback correct-fb show">✅ 答案：${q.ans}</div>
+                </div>`;
+                return;
+            }
             const labels = ['A','B','C','D','E'];
             const optsHTML = q.opts.map((opt,i) => {
                 const letter = labels[i];
@@ -300,10 +345,17 @@
         return `<div><label>导入到类别：</label>
             <select id="importCategory" style="padding:8px;border-radius:8px;border:1px solid var(--border);">${catOptions}</select>
             <div class="import-area" style="margin-top:12px;">
-                <textarea id="importTextarea" placeholder="支持：A.选项 B.选项 或 A) 选项 或 JSON"></textarea>
+                <textarea id="importTextarea" placeholder="支持单选/多选/填空题导入，格式见帮助说明"></textarea>
                 <button class="nav-btn" id="importBtn" style="margin-top:10px;">解析并导入</button>
                 <div id="importResult" style="margin-top:10px;"></div>
             </div>
+            <p style="margin-top:12px;font-size:0.9em;color:#5c4f3a;">
+                <b>填空题文本格式：</b><br>
+                1. 五脏包括心、肝、脾、肺、______。<br>
+                参考答案： 肾<br><br>
+                <b>JSON 格式：</b><br>
+                {"q": "五脏包括心、肝、脾、肺、______。", "type": "fill", "ans": "肾"}
+            </p>
         </div>`;
     }
 
@@ -316,14 +368,12 @@
             <button class="nav-btn" id="downloadGistBtn" style="margin-left:10px;">☁️ 从云端下载</button>
             <div class="auto-sync-row" style="margin:16px 0;">
                 <label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步到云端</label>
-                <span style="font-size:0.85em;color:#5c4f3a;">（答完题自动上传）</span>
             </div>
             <div style="margin-top:20px;">
-                <h4>🔑 GitHub Token 设置</h4>
+                <h4>🔑 GitHub Token</h4>
                 <input type="password" id="tokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx" value="${token}">
                 <div style="font-size:0.85em;margin-top:4px;color:${token?'var(--correct)':'#d4685c'};">${tokenStatus}</div>
                 <button class="nav-btn" id="saveTokenBtn" style="margin-top:8px;">💾 保存 Token</button>
-                <p style="margin-top:10px;font-size:0.9em;color:#5c4f3a;"><a href="https://github.com/settings/tokens" target="_blank">生成 Token</a>，勾选 <b>gist</b> 权限。</p>
             </div>
         </div>`;
     }
@@ -340,6 +390,19 @@
     }
 
     document.getElementById('mainContent').addEventListener('click', function(e) {
+        // 填空题确认
+        if(e.target.id === 'confirmFillBtn') {
+            const q = getCurrentQuestion();
+            if(!q || q._confirmed) return;
+            const input = document.getElementById('fillAnswer');
+            const val = input ? input.value : '';
+            setTempSelection(q.id, val);
+            q._confirmed = true;
+            if(val.trim() !== q.ans.trim()) incrementWrong(q.id);
+            triggerAutoSync();
+            renderMainContent();
+            return;
+        }
         const optionEl = e.target.closest('.option[data-action="toggle"]');
         if(optionEl) {
             e.preventDefault();
@@ -399,17 +462,22 @@
         }
     });
 
+    // 监听填空输入
+    document.getElementById('mainContent').addEventListener('input', function(e) {
+        if(e.target.id === 'fillAnswer') {
+            const q = getCurrentQuestion();
+            if(q) setTempSelection(q.id, e.target.value);
+        }
+    });
+
     window._copyToAI = function(qId) {
         const q = questions.find(q => q.id === qId);
         if(!q) return;
-        const sel = getTempSelection(qId) || '未选';
-        const text = `【${categories.find(c=>c.id===q.categoryId)?.name||''}】\n${q.q}\n${q.opts.map((o,i)=>String.fromCharCode(65+i)+') '+o).join('\n')}\n我的答案：${sel}\n标准答案：${q.ans}\n请解析。`;
+        const sel = getTempSelection(qId) || '未作答';
+        const text = `【${categories.find(c=>c.id===q.categoryId)?.name||''}】\n${q.q}\n我的答案：${sel}\n标准答案：${q.ans}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
-    window._nextRandom = function() {
-        if(randomIndex < shuffledOrder.length-1) { const cur = getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex++; }
-        renderMainContent();
-    };
+    window._nextRandom = function() { if(randomIndex < shuffledOrder.length-1) { const cur = getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex++; } renderMainContent(); };
     window._prevRandom = function() { if(randomIndex>0) { const cur = getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex--; } renderMainContent(); };
     window._jumpRandom = function() { const cur = getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex = Math.floor(Math.random()*shuffledOrder.length); renderMainContent(); };
     window._restartRound = function() { getPracticePool().forEach(q => delete q._confirmed); initRandomOrder(); renderMainContent(); };
@@ -459,7 +527,10 @@
                 const ansMatch = trimmed.match(/^答案[：:]\s*(.+)/) || trimmed.match(/^参考答案[：:]\s*(.+)/);
                 if(ansMatch && cur) { cur.ans = ansMatch[1].replace(/\s/g,''); cur.type = cur.ans.length > 1 ? 'multi' : 'single'; }
             }
-            if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); }
+            if(cur) {
+                if(opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); }
+                else if(opts.length === 0 && cur.ans) { cur.type = 'fill'; cur.categoryId = catId; imported.push(cur); }
+            }
         }
         if(!imported.length) { if(res) res.innerHTML='❌ 无法解析'; return; }
         const maxId = questions.reduce((max,q) => Math.max(max,q.id), 0);
@@ -495,7 +566,7 @@
                 categories = data.categories; questions = data.questions; wrongCounts = data.wrongCounts;
                 saveCategories(); saveQuestions(); saveWrongCounts();
                 renderCategories(); initRandomOrder(); renderMainContent();
-                showToast('☁️ 下载成功，数据已同步');
+                showToast('☁️ 下载成功');
             } else showToast('未找到数据');
         } catch(e) { showToast('网络错误'); }
     };
