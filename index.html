@@ -226,7 +226,6 @@
         const confirmed = q._confirmed;
         const catName = categories.find(c=>c.id===q.categoryId)?.name || '';
 
-        // 公布答案后显示的操作按钮
         const actionButtons = confirmed ? `
             <div class="action-row">
                 <button class="action-btn copy" id="copyBtn">📋 复制到AI解析</button>
@@ -588,11 +587,77 @@
 
     function getGistToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
     window._saveToken = function() { const token = document.getElementById('tokenInput').value.trim(); if(token) { localStorage.setItem(TOKEN_KEY, token); showToast('Token 已保存'); renderMainContent(); } };
-    window._downloadFromGist = async function() { /* 保持不变 */ };
+    window._downloadFromGist = async function() {
+        const token = getGistToken();
+        if(!token) { showToast('请先保存 Token'); return; }
+        const gistId = localStorage.getItem(GIST_ID_KEY);
+        if(!gistId) { showToast('请先上传一次数据'); return; }
+        try {
+            const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers:{'Authorization':`token ${token}`} });
+            const json = await res.json();
+            const file = json.files['tcm_data.json'];
+            if(file && file.content) {
+                const data = JSON.parse(file.content);
+                categories = data.categories; questions = data.questions; wrongCounts = data.wrongCounts;
+                saveCategories(); saveQuestions(); saveWrongCounts();
+                renderCategories(); initRandomOrder(); renderMainContent();
+                showToast('☁️ 下载成功');
+            } else showToast('未找到数据');
+        } catch(e) { showToast('网络错误'); }
+    };
 
-    document.getElementById('syncBtn').addEventListener('click', () => { /* 保持不变 */ });
-    document.getElementById('manageBtn').addEventListener('click', () => { /* 保持不变 */ });
-    document.querySelectorAll('.nav-tab').forEach(tab=>{ tab.addEventListener('click', function(){ document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); this.classList.add('active'); currentTab=this.dataset.tab; if(currentTab==='practice') initRandomOrder(); renderMainContent(); }); });
+    document.getElementById('syncBtn').addEventListener('click', () => {
+        const token = getGistToken();
+        if(!token) {
+            let modal = document.querySelector('.modal'); if(modal) modal.remove();
+            modal = document.createElement('div'); modal.className='modal';
+            modal.innerHTML = `<div class="modal-content">
+                <h3>设置 GitHub Token</h3>
+                <input type="password" id="quickTokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx">
+                <div style="margin-top:10px;display:flex;gap:10px;">
+                    <button class="nav-btn" id="quickSaveToken">保存并同步</button>
+                    <button class="nav-btn" id="cancelQuick">取消</button>
+                </div>
+            </div>`;
+            document.body.appendChild(modal);
+            document.getElementById('quickSaveToken').addEventListener('click', async () => {
+                const newToken = document.getElementById('quickTokenInput').value.trim();
+                if(newToken) { localStorage.setItem(TOKEN_KEY, newToken); modal.remove(); await syncNow(); }
+                else showToast('请输入 Token');
+            });
+            document.getElementById('cancelQuick').addEventListener('click', ()=> modal.remove());
+            return;
+        }
+        syncNow();
+    });
+
+    document.getElementById('manageBtn').addEventListener('click', ()=>{
+        let modal = document.querySelector('.modal'); if(modal) modal.remove();
+        modal = document.createElement('div'); modal.className='modal';
+        modal.innerHTML = `<div class="modal-content"><h3>管理类别</h3>
+            <ul style="list-style:none;padding:0;margin:14px 0;">
+                ${categories.map(c=>`<li style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;"><span>${c.name}</span><button class="delete-cat" data-id="${c.id}" style="color:red;background:none;border:none;font-size:1.2em;">✕</button></li>`).join('')}
+            </ul>
+            <div style="display:flex;gap:8px;"><input id="newCatName" placeholder="新类别" style="flex:1;padding:8px;border-radius:8px;border:1px solid #ccc;"><button id="addCatBtn" class="nav-btn">添加</button></div>
+            <button id="closeModal" class="nav-btn" style="margin-top:12px;width:100%;">关闭</button></div>`;
+        document.body.appendChild(modal);
+        document.getElementById('addCatBtn').addEventListener('click', ()=>{
+            const name = document.getElementById('newCatName').value.trim();
+            if(name) { categories.push({id:Date.now().toString(), name}); saveCategories(); renderCategories(); modal.remove(); }
+        });
+        modal.querySelectorAll('.delete-cat').forEach(btn=>{ btn.addEventListener('click', function(){
+            const id=this.dataset.id;
+            if(confirm('删除此类别及所有题目？')) { questions=questions.filter(q=>q.categoryId!==id); saveQuestions(); categories=categories.filter(c=>c.id!==id); saveCategories(); if(currentCategoryId===id) currentCategoryId='all'; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent(); } modal.remove();
+        });});
+        document.getElementById('closeModal').addEventListener('click', ()=>modal.remove());
+    });
+
+    document.querySelectorAll('.nav-tab').forEach(tab=>{ tab.addEventListener('click', function(){
+        document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+        this.classList.add('active'); currentTab=this.dataset.tab;
+        if(currentTab==='practice') initRandomOrder();
+        renderMainContent();
+    });});
 
     window.addEventListener('load', ()=>{ const token = getGistToken(); const input = document.getElementById('tokenInput'); if(input) input.value = token; });
     loadData(); renderCategories(); initRandomOrder(); renderMainContent();
