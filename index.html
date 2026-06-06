@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>中医学基础题库 · 分类练习版</title>
+    <style>
+        :root {
+            --bg: #f5f0eb;
+            --card-bg: #fffef9;
+            --text: #2c2416;
+            --accent: #8b5e3c;
+            --accent-light: #c9a87c;
+            --correct: #4a7c59;
+            --wrong: #d4685c;
+            --wrong-bg: #fef3f0;
+            --border: #e0d5c7;
+            --radius: 14px;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .app-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 12px;
+        }
+        .header {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 12px rgba(60,40,20,0.08);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            position: sticky;
+            top: 8px;
+            z-index: 100;
+        }
+        .header .logo {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+        .category-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            overflow-x: auto;
+            padding: 4px 0;
+        }
+        .category-chip {
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: #f0ebe0;
+            font-weight: 600;
+            font-size: 0.9em;
+            white-space: nowrap;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .category-chip.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .category-chip:hover { background: #e5d9c4; }
+        .category-chip.active:hover { background: var(--accent); }
+        .manage-categories-btn {
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 5px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 12px rgba(60,40,20,0.08);
+            border: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+        .nav-tab {
+            padding: 12px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95em;
+            border: none;
+            background: transparent;
+            color: #5c4f3a;
+            flex: 1;
+            min-width: 70px;
+            text-align: center;
+            white-space: nowrap;
+            transition: 0.2s;
+        }
+        .nav-tab.active { background: var(--accent); color: #fff; }
+        .main-content {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 18px 16px;
+            box-shadow: 0 2px 12px rgba(60,40,20,0.08);
+            border: 1px solid var(--border);
+            min-height: 400px;
+        }
+        .question-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 16px;
+            margin-bottom: 14px;
+            background: #fffef9;
+            transition: 0.2s;
+        }
+        .question-card.correct-card { border-left: 5px solid var(--correct); background: #f0f9f0; }
+        .question-card.wrong-card { border-left: 5px solid var(--wrong); background: var(--wrong-bg); }
+        .q-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .q-number { font-weight: 700; color: var(--accent); background: #f8f0e4; padding: 4px 12px; border-radius: 14px; }
+        .q-type { font-size: 0.8em; background: #f0ebe0; padding: 3px 10px; border-radius: 10px; }
+        .q-text { font-weight: 600; font-size: 1.05em; margin-bottom: 12px; line-height: 1.5; }
+        .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .option {
+            padding: 14px 14px;
+            border-radius: 10px;
+            border: 2px solid var(--border);
+            background: #fdfcf7;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1em;
+            min-height: 50px;
+            transition: 0.15s;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .option:active { background: #f0e8d8; border-color: var(--accent); }
+        .option.selected { border-color: var(--accent); background: #fdf3e4; font-weight: 600; }
+        .option.correct-answer { border-color: var(--correct) !important; background: #e0f2e0 !important; }
+        .option.wrong-answer { border-color: var(--wrong) !important; background: #ffe8e5 !important; }
+        .opt-letter { font-weight: 700; color: var(--accent); min-width: 24px; text-align: center; font-size: 1.1em; }
+        .feedback {
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .feedback.show { display: block; }
+        .feedback.correct-fb { background: #e0f2e0; color: #2d5a3b; }
+        .feedback.wrong-fb { background: #ffe8e5; color: #7b2d2d; }
+        .confirm-btn, .copy-btn {
+            padding: 12px 18px;
+            border-radius: 24px;
+            font-weight: 700;
+            font-size: 1em;
+            border: 2px solid var(--accent);
+            background: #fff;
+            color: var(--accent);
+            cursor: pointer;
+            min-width: 130px;
+            text-align: center;
+            transition: 0.2s;
+        }
+        .confirm-btn { background: var(--correct); color: #fff; border: none; margin-bottom: 10px; }
+        .copy-btn:hover { background: var(--accent); color: #fff; }
+        .nav-buttons { display: flex; justify-content: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+        .nav-btn {
+            padding: 12px 20px;
+            border-radius: 24px;
+            font-weight: 700;
+            border: 2px solid var(--border);
+            background: #fff;
+            cursor: pointer;
+            min-width: 80px;
+        }
+        .btn-primary-nav { background: var(--accent); color: #fff; border: none; }
+        .import-area textarea { width: 100%; min-height: 200px; border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-family: var(--font); font-size: 0.95em; }
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #333; color: #fff; padding: 12px 24px; border-radius: 24px;
+            font-weight: 600; z-index: 999; opacity: 0; transition: 0.3s;
+        }
+        .toast.show { opacity: 1; }
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); display: flex; justify-content: center;
+            align-items: center; z-index: 200;
+        }
+        .modal-content {
+            background: #fff; border-radius: 16px; padding: 20px;
+            max-width: 400px; width: 90%;
+        }
+        .practice-mode-switch {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .practice-mode-btn {
+            padding: 10px 18px;
+            border-radius: 24px;
+            border: 2px solid var(--border);
+            background: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .practice-mode-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        button { touch-action: manipulation; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="header">
+        <div class="logo">📚 题库练习</div>
+        <div class="category-selector" id="categoryContainer"></div>
+        <button class="manage-categories-btn" id="manageBtn">⚙️ 类别</button>
+    </div>
+    <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="practice">📖 练习</button>
+        <button class="nav-tab" data-tab="wrongbook">📕 错题</button>
+        <button class="nav-tab" data-tab="import">📥 导入</button>
+        <button class="nav-tab" data-tab="allQuestions">📋 全部</button>
+    </div>
+    <div class="main-content" id="mainContent"></div>
+    <div class="toast" id="toast"></div>
+</div>
+<script>
+(function() {
+    const CAT_KEY = 'tcm_categories_v1';
+    const Q_KEY = 'tcm_questions_v5';
+    const WRONG_KEY = 'tcm_wrong_counts_v5';
+    const SETTINGS_KEY = 'tcm_settings_v1';
+
+    let categories = [];
+    let questions = [];
+    let wrongCounts = {};
+    let currentCategoryId = 'all';
+    let currentTab = 'practice';
+    let practiceMode = 'all'; // 'all' 或 'wrong'
+    let shuffledOrder = [], randomIndex = 0;
+    let tempSelection = {};
+
+    function loadData() {
+        try { categories = JSON.parse(localStorage.getItem(CAT_KEY)) || []; } catch(e) { categories = []; }
+        if(!categories.length) {
+            categories = [{id: 'default', name: '中医基础'}];
+            saveCategories();
+        }
+        try { questions = JSON.parse(localStorage.getItem(Q_KEY)) || []; } catch(e) { questions = []; }
+        try { wrongCounts = JSON.parse(localStorage.getItem(WRONG_KEY)) || {}; } catch(e) { wrongCounts = {}; }
+        const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+        if(settings.currentCategoryId) currentCategoryId = settings.currentCategoryId;
+    }
+    function saveCategories() { localStorage.setItem(CAT_KEY, JSON.stringify(categories)); }
+    function saveQuestions() { localStorage.setItem(Q_KEY, JSON.stringify(questions)); }
+    function saveWrongCounts() { localStorage.setItem(WRONG_KEY, JSON.stringify(wrongCounts)); }
+    function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify({currentCategoryId})); }
+
+    function getWrongCount(qId) { return wrongCounts[qId] || 0; }
+    function incrementWrong(qId) { wrongCounts[qId] = (wrongCounts[qId]||0)+1; saveWrongCounts(); }
+
+    function getQuestionsByCategory(catId) {
+        return catId === 'all' ? questions : questions.filter(q => q.categoryId === catId);
+    }
+
+    function getPracticePool() {
+        const allCat = getQuestionsByCategory(currentCategoryId);
+        if(practiceMode === 'wrong') {
+            return allCat.filter(q => (wrongCounts[q.id] || 0) > 0);
+        }
+        return allCat;
+    }
+
+    function shuffleArray(arr) { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]; } return a; }
+    function initRandomOrder() {
+        const pool = getPracticePool();
+        shuffledOrder = shuffleArray(pool.map(q => q.id));
+        randomIndex = 0;
+        tempSelection = {};
+    }
+    function getCurrentQuestion() {
+        const pool = getPracticePool();
+        if(!pool.length) return null;
+        if(!shuffledOrder.length) initRandomOrder();
+        if(randomIndex >= shuffledOrder.length) return null;
+        const qId = shuffledOrder[randomIndex];
+        return pool.find(q => q.id === qId);
+    }
+    function getTempSelection(qId) { return tempSelection[qId] || ''; }
+    function setTempSelection(qId, val) { tempSelection[qId] = val; }
+    function normalizeAnswer(ans) { return ans.replace(/\s+/g,'').toUpperCase().split('').sort().join(''); }
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.classList.add('show');
+        clearTimeout(t._timeout); t._timeout = setTimeout(()=>t.classList.remove('show'), 1800);
+    }
+
+    function renderCategories() {
+        const container = document.getElementById('categoryContainer');
+        container.innerHTML = '';
+        const allChip = document.createElement('span');
+        allChip.className = 'category-chip' + (currentCategoryId === 'all' ? ' active' : '');
+        allChip.textContent = '全部';
+        allChip.addEventListener('click', () => switchCategory('all'));
+        container.appendChild(allChip);
+        categories.forEach(c => {
+            const chip = document.createElement('span');
+            chip.className = 'category-chip' + (c.id === currentCategoryId ? ' active' : '');
+            chip.textContent = c.name;
+            chip.addEventListener('click', () => switchCategory(c.id));
+            container.appendChild(chip);
+        });
+    }
+    function switchCategory(catId) {
+        currentCategoryId = catId;
+        saveSettings();
+        renderCategories();
+        initRandomOrder();
+        renderMainContent();
+    }
+
+    function renderPracticeMode() {
+        const pool = getPracticePool();
+        if(!pool.length) {
+            if(practiceMode === 'wrong') {
+                return `<div class="empty-state">📭 当前类别暂无错题，请先在全部题目中练习</div>
+                        <div class="practice-mode-switch">
+                            <button class="practice-mode-btn active" id="modeAllBtn">📋 全部题目</button>
+                            <button class="practice-mode-btn" id="modeWrongBtn">📕 只做错题</button>
+                        </div>`;
+            }
+            return '<div class="empty-state">📭 该类别暂无题目，请先导入</div>';
+        }
+        const q = getCurrentQuestion();
+        if(!q) return `<div class="empty-state"><p>🎉 本轮已完成</p><button class="nav-btn" onclick="window._restartRound()">重新开始</button>
+            <div class="practice-mode-switch">
+                <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
+                <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
+            </div></div>`;
+        const sel = getTempSelection(q.id);
+        const confirmed = q._confirmed;
+        const labels = ['A','B','C','D','E'];
+        let optsHTML = q.opts.map((opt,i)=>{
+            const letter = labels[i];
+            let cls = 'option';
+            if(sel.includes(letter)) cls += ' selected';
+            if(confirmed) {
+                if(normalizeAnswer(q.ans).includes(letter)) cls += ' correct-answer';
+                if(sel.includes(letter) && !normalizeAnswer(q.ans).includes(letter)) cls += ' wrong-answer';
+            }
+            const attr = confirmed ? '' : `data-action="toggle" data-qid="${q.id}" data-letter="${letter}"`;
+            return `<div class="${cls}" ${attr}><span class="opt-letter">${letter}</span>${opt}</div>`;
+        }).join('');
+        let confirmHTML = '';
+        if(q.type==='multi' && !confirmed) {
+            confirmHTML = '<button class="confirm-btn" id="confirmBtn">✅ 确认答案</button>';
+        }
+        let feedbackHTML = '';
+        if(confirmed) {
+            const correct = normalizeAnswer(sel)===normalizeAnswer(q.ans);
+            feedbackHTML = correct ? '<div class="feedback correct-fb show">✅ 正确！</div>'
+                : '<div class="feedback wrong-fb show">❌ 错误。答案：'+q.ans+'</div>';
+        }
+        const catName = categories.find(c=>c.id===q.categoryId)?.name || '';
+        return `
+        <div class="practice-mode-switch">
+            <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部题目</button>
+            <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 只做错题</button>
+        </div>
+        <div class="question-card" id="qcard">
+            <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">${q.type==='multi'?'多选':'单选'}</span></div>
+            <div class="q-text">${q.q}</div>
+            <div class="options">${optsHTML}</div>
+            ${confirmHTML}
+            ${feedbackHTML}
+            <button class="copy-btn" id="copyBtn">📋 复制并打开 DeepSeek 解析</button>
+        </div>
+        <div style="text-align:center; margin:8px;">${randomIndex+1}/${shuffledOrder.length}</div>
+        <div class="nav-buttons">
+            <button class="nav-btn" id="prevBtn" ${randomIndex===0?'disabled':''}>◀ 上一题</button>
+            <button class="nav-btn btn-primary-nav" id="nextBtn">下一题 ▶</button>
+            <button class="nav-btn" id="jumpBtn">🔀 随机跳题</button>
+        </div>`;
+    }
+
+    function renderWrongBook() {
+        const wrongIds = Object.keys(wrongCounts).filter(id => wrongCounts[id] > 0).map(Number);
+        if(!wrongIds.length) return '<div class="empty-state">📕 错题本为空</div>';
+        const pool = getQuestionsByCategory(currentCategoryId);
+        const qs = wrongIds.map(id => pool.find(q => q.id === id)).filter(Boolean);
+        if(!qs.length) return '<div class="empty-state">当前类别没有错题</div>';
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <b>错题本 (${qs.length})</b>
+            <button class="nav-btn" id="clearWrongBtn" style="color:#d4685c; border-color:#d4685c;">清空当前</button>
+        </div>`;
+        qs.forEach(q => {
+            const labels = ['A','B','C','D','E'];
+            const optsHTML = q.opts.map((opt,i) => {
+                const letter = labels[i];
+                const isCorrect = normalizeAnswer(q.ans).includes(letter);
+                const cls = 'option' + (isCorrect ? ' correct-answer' : '');
+                return `<div class="${cls}"><span class="opt-letter">${letter}</span>${opt}</div>`;
+            }).join('');
+            html += `<div class="question-card" style="background:#fef9f5;">
+                <div class="q-header"><span class="q-number">#${q.id} 错过${getWrongCount(q.id)}次</span></div>
+                <div class="q-text">${q.q}</div>
+                <div class="options">${optsHTML}</div>
+                <div class="feedback correct-fb show">✅ 答案：${q.ans}</div>
+            </div>`;
+        });
+        return html;
+    }
+
+    function renderAllQuestionsList() {
+        const pool = getQuestionsByCategory(currentCategoryId);
+        if(!pool.length) return '<div class="empty-state">暂无题目</div>';
+        return `<div><b>全部题目 (${pool.length})</b></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+            ${pool.map(q => `<span class="nav-btn" style="min-width:auto; padding:8px 14px;" onclick="window._jumpToQuestion(${q.id})">#${q.id}</span>`).join('')}
+        </div>`;
+    }
+
+    function renderImportMode() {
+        const catOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        return `<div>
+            <label>导入到类别：</label>
+            <select id="importCategory" style="padding:8px; border-radius:8px; border:1px solid var(--border);">${catOptions}</select>
+            <div class="import-area" style="margin-top:12px;">
+                <textarea id="importTextarea" placeholder="粘贴题目（支持文本/JSON）..."></textarea>
+                <button class="nav-btn" id="importBtn" style="margin-top:10px;">解析并导入</button>
+                <div id="importResult" style="margin-top:10px;"></div>
+            </div>
+        </div>`;
+    }
+
+    function renderMainContent() {
+        const main = document.getElementById('mainContent');
+        switch(currentTab) {
+            case 'practice': main.innerHTML = renderPracticeMode(); break;
+            case 'wrongbook': main.innerHTML = renderWrongBook(); break;
+            case 'import': main.innerHTML = renderImportMode(); break;
+            case 'allQuestions': main.innerHTML = renderAllQuestionsList(); break;
+        }
+    }
+
+    // 事件委托
+    document.getElementById('mainContent').addEventListener('click', function(e) {
+        const optionEl = e.target.closest('.option[data-action="toggle"]');
+        if(optionEl) {
+            e.preventDefault();
+            const qId = parseInt(optionEl.dataset.qid);
+            const letter = optionEl.dataset.letter;
+            const q = questions.find(q => q.id === qId);
+            if(!q || q._confirmed) return;
+
+            if(q.type === 'single') {
+                setTempSelection(qId, letter);
+                q._confirmed = true;
+                if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId);
+                renderMainContent();
+            } else {
+                let arr = getTempSelection(qId).split('').filter(Boolean);
+                if(arr.includes(letter)) arr = arr.filter(l => l !== letter);
+                else arr.push(letter);
+                setTempSelection(qId, arr.sort().join(''));
+                optionEl.classList.toggle('selected', arr.includes(letter));
+            }
+            return;
+        }
+
+        if(e.target.id === 'confirmBtn') {
+            const q = getCurrentQuestion();
+            if(!q || q._confirmed) return;
+            q._confirmed = true;
+            if(normalizeAnswer(getTempSelection(q.id)) !== normalizeAnswer(q.ans)) incrementWrong(q.id);
+            renderMainContent();
+            return;
+        }
+
+        if(e.target.id === 'copyBtn') {
+            const q = getCurrentQuestion();
+            if(q) window._copyToAI(q.id);
+            return;
+        }
+
+        if(e.target.id === 'prevBtn') { window._prevRandom(); return; }
+        if(e.target.id === 'nextBtn') { window._nextRandom(); return; }
+        if(e.target.id === 'jumpBtn') { window._jumpRandom(); return; }
+        if(e.target.id === 'importBtn') { window._batchImport(); return; }
+        if(e.target.id === 'clearWrongBtn') { window._clearWrongBook(); return; }
+        if(e.target.id === 'modeAllBtn') {
+            practiceMode = 'all';
+            initRandomOrder();
+            renderMainContent();
+            return;
+        }
+        if(e.target.id === 'modeWrongBtn') {
+            practiceMode = 'wrong';
+            initRandomOrder();
+            renderMainContent();
+            return;
+        }
+    });
+
+    window._copyToAI = function(qId) {
+        const q = questions.find(q => q.id === qId);
+        if(!q) return;
+        const sel = getTempSelection(qId) || '未选';
+        const catName = categories.find(c=>c.id===q.categoryId)?.name || '';
+        const promptText = `请深度思考并详细解析以下题目：\n【${catName}】\n${q.q}\n${q.opts.map((o,i)=>String.fromCharCode(65+i)+') '+o).join('\n')}\n我的答案：${sel}\n标准答案：${q.ans}\n请给出正确答案的详细解释。`;
+
+        // 复制到剪贴板
+        navigator.clipboard.writeText(promptText).then(() => showToast('已复制并跳转 DeepSeek'));
+
+        // 打开 DeepSeek 对话页面（尝试通过 q 参数预填问题）
+        const url = `https://chat.deepseek.com/?q=${encodeURIComponent(promptText)}`;
+        window.open(url, '_blank');
+    };
+
+    window._nextRandom = function() {
+        if(randomIndex < shuffledOrder.length-1) {
+            const cur = getCurrentQuestion(); if(cur) delete cur._confirmed;
+            randomIndex++;
+        }
+        renderMainContent();
+    };
+    window._prevRandom = function() {
+        if(randomIndex > 0) {
+            const cur = getCurrentQuestion(); if(cur) delete cur._confirmed;
+            randomIndex--;
+        }
+        renderMainContent();
+    };
+    window._jumpRandom = function() {
+        const cur = getCurrentQuestion(); if(cur) delete cur._confirmed;
+        randomIndex = Math.floor(Math.random() * shuffledOrder.length);
+        renderMainContent();
+    };
+    window._restartRound = function() {
+        getPracticePool().forEach(q => delete q._confirmed);
+        initRandomOrder();
+        renderMainContent();
+    };
+    window._jumpToQuestion = function(qId) {
+        currentTab = 'practice';
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector('[data-tab="practice"]').classList.add('active');
+        const pool = getPracticePool();
+        const ids = pool.map(q => q.id);
+        const idx = ids.indexOf(qId);
+        if(idx >= 0) randomIndex = idx;
+        renderMainContent();
+    };
+    window._clearWrongBook = function() {
+        if(!confirm('清空当前类别的错题记录？')) return;
+        getQuestionsByCategory(currentCategoryId).forEach(q => delete wrongCounts[q.id]);
+        saveWrongCounts();
+        renderMainContent();
+    };
+    window._batchImport = function() {
+        const text = document.getElementById('importTextarea')?.value.trim();
+        const res = document.getElementById('importResult');
+        if(!text) { if(res) res.innerHTML='⚠️ 请粘贴文本'; return; }
+        const catId = document.getElementById('importCategory')?.value || categories[0]?.id;
+        let imported = [];
+        try {
+            const parsed = JSON.parse(text);
+            if(Array.isArray(parsed)) imported = parsed.map(item => ({...item, categoryId: catId}));
+        } catch(e) {
+            const lines = text.split('\n');
+            let cur = null, opts = [];
+            for(const line of lines) {
+                const trimmed = line.trim();
+                if(!trimmed) continue;
+                const qm = trimmed.match(/^(\d+)\.\s*(.+)/);
+                if(qm && !/^[A-E]\)/.test(trimmed)) {
+                    if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; imported.push(cur); }
+                    cur = { q: qm[2], opts: [], ans: '', type: 'single' }; opts = []; continue;
+                }
+                const om = trimmed.match(/^([A-E])\)\s*(.+)/);
+                if(om && cur) { opts.push(om[2]); continue; }
+                const am = trimmed.match(/^参考答案[：:]\s*(.+)/);
+                if(am && cur) { cur.ans = am[1].replace(/\s/g,''); cur.type = cur.ans.length > 1 ? 'multi' : 'single'; }
+            }
+            if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; imported.push(cur); }
+        }
+        if(!imported.length) { if(res) res.innerHTML='❌ 无法解析'; return; }
+        const maxId = questions.reduce((max,q) => Math.max(max,q.id), 0);
+        imported.forEach((q, i) => q.id = maxId + i + 1);
+        questions.push(...imported);
+        saveQuestions();
+        initRandomOrder();
+        renderMainContent();
+        if(res) res.innerHTML = `✅ 导入 ${imported.length} 题`;
+        showToast('导入成功');
+    };
+
+    // 类别管理
+    document.getElementById('manageBtn').addEventListener('click', () => {
+        let modal = document.querySelector('.modal');
+        if(modal) modal.remove();
+        modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h3>管理类别</h3>
+                <ul style="list-style:none; padding:0; margin:14px 0;">
+                    ${categories.map(c => `<li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
+                        <span>${c.name}</span>
+                        <button class="delete-cat" data-id="${c.id}" style="color:red; background:none; border:none; font-size:1.2em;">✕</button>
+                    </li>`).join('')}
+                </ul>
+                <div style="display:flex; gap:8px;">
+                    <input id="newCatName" placeholder="新类别名称" style="flex:1; padding:8px; border-radius:8px; border:1px solid #ccc;">
+                    <button id="addCatBtn" class="nav-btn">添加</button>
+                </div>
+                <button id="closeModal" class="nav-btn" style="margin-top:12px; width:100%;">关闭</button>
+            </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('addCatBtn').addEventListener('click', () => {
+            const name = document.getElementById('newCatName').value.trim();
+            if(name) {
+                categories.push({ id: Date.now().toString(), name });
+                saveCategories();
+                renderCategories();
+                modal.remove();
+            }
+        });
+        modal.querySelectorAll('.delete-cat').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                if(confirm('删除此类别将同时删除该类别下所有题目，确定？')) {
+                    questions = questions.filter(q => q.categoryId !== id);
+                    saveQuestions();
+                    categories = categories.filter(c => c.id !== id);
+                    saveCategories();
+                    if(currentCategoryId === id) currentCategoryId = 'all';
+                    saveSettings();
+                    renderCategories();
+                    initRandomOrder();
+                    renderMainContent();
+                }
+                modal.remove();
+            });
+        });
+        document.getElementById('closeModal').addEventListener('click', () => modal.remove());
+    });
+
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            currentTab = this.dataset.tab;
+            if(currentTab === 'practice') initRandomOrder();
+            renderMainContent();
+        });
+    });
+
+    // 初始化
+    loadData();
+    renderCategories();
+    initRandomOrder();
+    renderMainContent();
+})();
+</script>
+</body>
+</html>
