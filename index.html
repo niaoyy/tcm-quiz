@@ -143,6 +143,7 @@
         if(randomIndex >= shuffledOrder.length) return null;
         return pool.find(q => q.id === shuffledOrder[randomIndex]);
     }
+    // 获取用户选择（统一为字符串或对象，这里进行兼容处理）
     function getTempSelection(qId) { return tempSelection[qId] || ''; }
     function setTempSelection(qId, val) { tempSelection[qId] = val; }
     function normalizeAnswer(ans) { return ans.replace(/\s+/g,'').toUpperCase().split('').sort().join(''); }
@@ -227,19 +228,18 @@
         return text.split(/([，。；？！、：])/g).filter(s => s !== '');
     }
 
-    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复所有已知问题
-    function renderEntryQuestion(q, sel, confirmed) {
+    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复跳跃bug，并支持离开后重新随机
+    function renderEntryQuestion(q, selObj, confirmed) {
         const parts = splitPhrases(q.q);
         const textIndices = [];
         parts.forEach((part, i) => { if (!/^[，。；？！、：]$/.test(part)) textIndices.push(i); });
         const count = Math.min(blankCount, textIndices.length);
-        // 如果已确认，直接使用缓存的索引（不再重新随机）
         let selectedIndices;
         if (q._blankIndices && q._blankCount === blankCount) {
             selectedIndices = q._blankIndices;
         } else {
             selectedIndices = shuffleArray(textIndices).slice(0, count);
-            // 仅在未确认时保存索引
+            // 仅在未确认时保存索引，确认后不再保存，以便下次随机
             if (!confirmed) {
                 q._blankIndices = selectedIndices;
                 q._blankCount = blankCount;
@@ -248,12 +248,19 @@
         const blanks = {};
         selectedIndices.forEach(i => { blanks[i] = true; });
 
+        // 用户输入值提取（selObj可能是字符串或对象）
+        let userInputs = [];
+        if (typeof selObj === 'string' && selObj) {
+            userInputs = selObj.split('|||');
+        } else if (selObj && typeof selObj === 'object' && selObj.currentVals) {
+            userInputs = selObj.currentVals.split('|||');
+        }
+
         let html = '';
         parts.forEach((part, i) => {
             if (blanks[i]) {
                 const inputId = `entryBlank_${q.id}_${i}`;
-                // 使用 || 分隔符保存各输入框内容
-                const val = (typeof sel === 'object' && sel.indices) ? (sel.split('|||')[i] || '') : '';
+                const val = (userInputs[i] !== undefined) ? userInputs[i] : '';
                 html += `<input type="text" class="entry-input" id="${inputId}" value="${val}" placeholder="填入文字" ${confirmed ? 'disabled' : ''} />`;
             } else {
                 html += `<span>${part}</span>`;
@@ -283,26 +290,20 @@
         </div>` : '';
 
         if(q.type === 'entry') {
-            // 确保 sel 为对象结构
-            if (typeof sel === 'string' && sel.length > 0) {
-                // 兼容旧数据：如果是字符串，重新构建对象
-                setTempSelection(q.id, null);
-            }
-            const { html: entryHTML, correctAnswers, indices } = renderEntryQuestion(q, getTempSelection(q.id), confirmed);
+            const { html: entryHTML, correctAnswers, indices } = renderEntryQuestion(q, sel, confirmed);
+            // 存储挖空信息
             if(!confirmed) setTempSelection(q.id, { indices, answers: correctAnswers });
             let confirmHTML = !confirmed ? '<button class="confirm-btn" id="confirmEntryBtn">✅ 确认答案</button>' : '';
             let fb = '';
             if(confirmed) {
-                const selData = getTempSelection(q.id);
-                if (selData && selData.indices) {
-                    const userInputs = selData.indices.map(i => {
-                        const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
-                        return inputEl ? inputEl.value : '';
-                    });
-                    const userAnswers = userInputs.join('|||');
-                    const correct = userAnswers === correctAnswers;
-                    fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
-                }
+                const userInputs = [];
+                indices.forEach(i => {
+                    const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
+                    userInputs.push(inputEl ? inputEl.value : '');
+                });
+                const userAnswers = userInputs.join('|||');
+                const correct = userAnswers === correctAnswers;
+                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
             }
             return `<div class="practice-mode-switch">
                 <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部</button>
@@ -406,7 +407,8 @@
             });
             const userAnswers = userInputs.join('|||');
             const correct = userAnswers === sel.answers;
-            setTempSelection(q.id, { indices: sel.indices, answers: sel.answers, lastInput: userAnswers });
+            // 保存用户答案（统一为字符串，方便后续显示）
+            setTempSelection(q.id, userAnswers);
             q._confirmed = true;
             if(!correct) incrementWrong(q.id);
             triggerAutoSync();
@@ -414,21 +416,7 @@
             return;
         }
         if(e.target.id === 'copyPromptBtn') {
-            const prompt = `请将以下内容转换为可直接导入“在线练习系统”的JSON数组格式。系统支持四种题型：单选、多选、填空、条目（背诵挖空）。
-
-题型说明及JSON示例：
-1. 单选题（type: "single"）：列出所有选项，正确答案为单个字母。
-   {"q": "题目内容", "opts": ["选项A","选项B","选项C","选项D"], "ans": "C", "type": "single"}
-2. 多选题（type: "multi"）：列出所有选项，正确答案为多个字母组合（如"ACE"）。
-   {"q": "题目内容", "opts": ["选项1","选项2","选项3","选项4","选项5"], "ans": "ACE", "type": "multi"}
-3. 填空题（type: "fill"）：题目中通常有______或（），直接给出答案文本。
-   {"q": "五脏包括心、肝、脾、肺、______。", "ans": "肾", "type": "fill"}
-4. 条目题（type: "entry"）：用于背诵默写整段文字，无需选项，q字段为完整原文。
-   {"q": "上古之人，其知道者，法于阴阳……", "type": "entry"}
-
-如果内容包含多道题目（如有序号分段），请为每道题生成一个JSON对象，放入数组中。请直接输出JSON数组，无需额外解释。
-
-请转换以下内容：`;
+            const prompt = `请将以下内容转换为可直接导入"在线练习系统"的JSON数组格式。系统支持四种题型：单选、多选、填空、条目（背诵挖空）。\n\n题型说明及JSON示例：\n1. 单选题（type: "single"）：列出所有选项，正确答案为单个字母。\n   {"q": "题目内容", "opts": ["选项A","选项B","选项C","选项D"], "ans": "C", "type": "single"}\n2. 多选题（type: "multi"）：列出所有选项，正确答案为多个字母组合（如"ACE"）。\n   {"q": "题目内容", "opts": ["选项1","选项2","选项3","选项4","选项5"], "ans": "ACE", "type": "multi"}\n3. 填空题（type: "fill"）：题目中通常有______或（），直接给出答案文本。\n   {"q": "五脏包括心、肝、脾、肺、______。", "ans": "肾", "type": "fill"}\n4. 条目题（type: "entry"）：用于背诵默写整段文字，无需选项，q字段为完整原文。\n   {"q": "上古之人，其知道者，法于阴阳……", "type": "entry"}\n\n如果内容包含多道题目（如有序号分段），请为每道题生成一个JSON对象，放入数组中。请直接输出JSON数组，无需额外解释。\n\n请转换以下内容：`;
             navigator.clipboard.writeText(prompt).then(() => showToast('Prompt已复制'));
             return;
         }
@@ -441,29 +429,7 @@
             return;
         }
         const optEl = e.target.closest('.option[data-action="toggle"]');
-        if(optEl) { 
-            e.preventDefault(); 
-            const qId = parseInt(optEl.dataset.qid); 
-            const letter = optEl.dataset.letter; 
-            const q = questions.find(q => q.id === qId); 
-            if(!q || q._confirmed) return; 
-            if(q.type === 'single') { 
-                setTempSelection(qId, letter); 
-                q._confirmed = true; 
-                if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId); 
-                triggerAutoSync(); 
-                renderMainContent(); 
-            } else { 
-                let current = getTempSelection(qId);
-                if (typeof current !== 'string') current = '';
-                let arr = current.split('').filter(Boolean); 
-                if(arr.includes(letter)) arr = arr.filter(l => l !== letter); 
-                else arr.push(letter); 
-                setTempSelection(qId, arr.sort().join('')); 
-                optEl.classList.toggle('selected', arr.includes(letter)); 
-            } 
-            return; 
-        }
+        if(optEl) { e.preventDefault(); const qId = parseInt(optEl.dataset.qid); const letter = optEl.dataset.letter; const q = questions.find(q => q.id === qId); if(!q || q._confirmed) return; if(q.type === 'single') { setTempSelection(qId, letter); q._confirmed = true; if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId); triggerAutoSync(); renderMainContent(); } else { let arr = (getTempSelection(qId) || '').split('').filter(Boolean); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); setTempSelection(qId, arr.sort().join('')); optEl.classList.toggle('selected', arr.includes(letter)); } return; }
         if(e.target.id === 'confirmBtn') { const q = getCurrentQuestion(); if(!q || q._confirmed) return; q._confirmed = true; if(normalizeAnswer(getTempSelection(q.id)) !== normalizeAnswer(q.ans)) incrementWrong(q.id); triggerAutoSync(); renderMainContent(); return; }
         if(e.target.id === 'copyBtn') { const q = getCurrentQuestion(); if(q) window._copyToAI(q.id); return; }
         if(e.target.id === 'prevBtn') { window._prevRandom(); return; }
@@ -497,7 +463,7 @@
         // 条目输入框自动保存
         if(e.target.classList.contains('entry-input')) {
             const q = getCurrentQuestion();
-            if(q && !q._confirmed) {
+            if(q) {
                 const sel = getTempSelection(q.id) || {};
                 const inputs = document.querySelectorAll(`.entry-input[id^="entryBlank_${q.id}_"]`);
                 const vals = Array.from(inputs).map(inp => inp.value);
@@ -512,19 +478,17 @@
         if(!q) return;
         const sel = getTempSelection(qId) || '未答';
         let text = `【${categories.find(c=>c.id===q.categoryId)?.name||''}】\n${q.q}\n`;
-        if(q.type === 'entry') text += `默写片段：${typeof sel === 'object' ? sel.lastInput || '' : sel}\n`;
+        if(q.type === 'entry') text += `默写片段：${sel}\n`;
         else if(q.type !== 'fill') { const labels = ['A','B','C','D','E']; text += q.opts.map((opt,i) => `${labels[i]}) ${opt}`).join('\n') + '\n'; }
         text += `我的答案：${typeof sel === 'string' ? sel : ''}\n标准答案：${q.ans || q.q}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
-    // 导航函数修改：离开当前题目时清除条目挖空缓存和确认状态
+    // 导航函数修改：离开当前题目时清除条目挖空缓存，并删除确认状态
     window._nextRandom = function() {
         if(randomIndex < shuffledOrder.length-1) {
             const cur = getCurrentQuestion();
-            if(cur) {
-                if(cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-                delete cur._confirmed;
-            }
+            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+            if(cur) delete cur._confirmed;
             randomIndex++;
         }
         renderMainContent();
@@ -532,20 +496,16 @@
     window._prevRandom = function() {
         if(randomIndex > 0) {
             const cur = getCurrentQuestion();
-            if(cur) {
-                if(cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-                delete cur._confirmed;
-            }
+            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+            if(cur) delete cur._confirmed;
             randomIndex--;
         }
         renderMainContent();
     };
     window._jumpRandom = function() {
         const cur = getCurrentQuestion();
-        if(cur) {
-            if(cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-            delete cur._confirmed;
-        }
+        if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+        if(cur) delete cur._confirmed;
         randomIndex = Math.floor(Math.random() * shuffledOrder.length);
         renderMainContent();
     };
