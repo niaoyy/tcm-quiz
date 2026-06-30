@@ -70,7 +70,7 @@
         .entry-blank { display:inline-block; min-width:80px; border-bottom:2px solid var(--accent); margin:0 4px; }
         .entry-input { border:2px solid var(--accent); border-radius:6px; padding:4px 8px; font-size:1em; width:120px; }
         .blank-config { display:flex; align-items:center; gap:6px; }
-        .blank-config input { width:50px; padding:4px; border-radius:6px; border:1px solid var(--border); text-align:center; }
+        .blank-config button { min-width:36px; padding:4px 10px; font-size:1em; }
     </style>
 </head>
 <body>
@@ -143,7 +143,6 @@
         if(randomIndex >= shuffledOrder.length) return null;
         return pool.find(q => q.id === shuffledOrder[randomIndex]);
     }
-    // 获取用户选择（统一为字符串或对象，这里进行兼容处理）
     function getTempSelection(qId) { return tempSelection[qId] || ''; }
     function setTempSelection(qId, val) { tempSelection[qId] = val; }
     function normalizeAnswer(ans) { return ans.replace(/\s+/g,'').toUpperCase().split('').sort().join(''); }
@@ -291,7 +290,6 @@
 
         if(q.type === 'entry') {
             const { html: entryHTML, correctAnswers, indices } = renderEntryQuestion(q, sel, confirmed);
-            // 存储挖空信息
             if(!confirmed) setTempSelection(q.id, { indices, answers: correctAnswers });
             let confirmHTML = !confirmed ? '<button class="confirm-btn" id="confirmEntryBtn">✅ 确认答案</button>' : '';
             let fb = '';
@@ -305,10 +303,12 @@
                 const correct = userAnswers === correctAnswers;
                 fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
             }
+            // 挖空数控制改为按钮
+            const blankControlHTML = `<span class="blank-config">挖空数：<button class="nav-btn" id="decBlankBtn" style="min-width:36px;padding:4px 10px;">−</button><span style="min-width:30px;text-align:center;display:inline-block;">${blankCount}</span><button class="nav-btn" id="incBlankBtn" style="min-width:36px;padding:4px 10px;">+</button></span>`;
             return `<div class="practice-mode-switch">
                 <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部</button>
                 <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 错题</button>
-                <span class="blank-config">挖空数：<input type="number" id="blankCountInput" value="${blankCount}" min="1" max="10"></span>
+                ${blankControlHTML}
             </div>
             <div class="question-card" id="qcard">
                 <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">条目</span></div>
@@ -420,12 +420,20 @@
             navigator.clipboard.writeText(prompt).then(() => showToast('Prompt已复制'));
             return;
         }
-        if(e.target.id === 'blankCountInput') {
-            const val = parseInt(e.target.value);
-            if(val >= 1 && val <= 10) {
-                blankCount = val;
-                renderMainContent();
-            }
+        // 移动端友好的挖空数增减按钮
+        if(e.target.id === 'incBlankBtn') {
+            if(blankCount < 10) blankCount++;
+            // 清除当前题的挖空缓存，以使用新数量
+            const q = getCurrentQuestion();
+            if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
+            renderMainContent();
+            return;
+        }
+        if(e.target.id === 'decBlankBtn') {
+            if(blankCount > 1) blankCount--;
+            const q = getCurrentQuestion();
+            if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
+            renderMainContent();
             return;
         }
         const optEl = e.target.closest('.option[data-action="toggle"]');
@@ -483,7 +491,6 @@
         text += `我的答案：${typeof sel === 'string' ? sel : ''}\n标准答案：${q.ans || q.q}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
-    // 导航函数修改：离开当前题目时清除条目挖空缓存，并删除确认状态
     window._nextRandom = function() {
         if(randomIndex < shuffledOrder.length-1) {
             const cur = getCurrentQuestion();
