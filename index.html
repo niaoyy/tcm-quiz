@@ -60,13 +60,17 @@
         .toast.show { opacity:1; }
         .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); display:flex; justify-content:center; align-items:center; z-index:200; }
         .modal-content { background:#fff; border-radius:16px; padding:20px; max-width:400px; width:90%; }
-        .practice-mode-switch { display:flex; justify-content:center; gap:12px; margin-bottom:14px; }
+        .practice-mode-switch { display:flex; justify-content:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
         .practice-mode-btn { padding:10px 18px; border-radius:24px; border:2px solid var(--border); background:#fff; font-weight:600; cursor:pointer; transition:0.2s; }
         .practice-mode-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
         .auto-sync-row { display:flex; align-items:center; gap:10px; margin:10px 0; font-size:0.9em; }
         .auto-sync-row input[type=checkbox] { width:20px; height:20px; }
         .token-link { color:var(--accent); text-decoration:underline; font-size:0.9em; margin-top:4px; display:inline-block; }
         button { touch-action:manipulation; cursor:pointer; }
+        .entry-blank { display:inline-block; min-width:80px; border-bottom:2px solid var(--accent); margin:0 4px; }
+        .entry-input { border:2px solid var(--accent); border-radius:6px; padding:4px 8px; font-size:1em; width:120px; }
+        .blank-config { display:flex; align-items:center; gap:6px; }
+        .blank-config input { width:50px; padding:4px; border-radius:6px; border:1px solid var(--border); text-align:center; }
     </style>
 </head>
 <body>
@@ -104,6 +108,7 @@
     let currentCategoryId = 'all';
     let currentTab = 'practice';
     let practiceMode = 'all';
+    let blankCount = 1;
     let shuffledOrder = [], randomIndex = 0;
     let tempSelection = {};
     let autoSyncEnabled = false;
@@ -217,6 +222,35 @@
     }
     function switchCategory(catId) { currentCategoryId = catId; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent(); }
 
+    // 辅助：将条目原文拆分为短语和标点（标点单独，文字单独）
+    function splitPhrases(text) {
+        return text.split(/([，。；？！、：])/g).filter(s => s !== '');
+    }
+
+    // 渲染条目题（挖空仅针对文字部分，标点保留）
+    function renderEntryQuestion(q, sel, confirmed) {
+        const parts = splitPhrases(q.q);
+        const textIndices = [];
+        parts.forEach((part, i) => { if (!/^[，。；？！、：]$/.test(part)) textIndices.push(i); });
+        const count = Math.min(blankCount, textIndices.length);
+        const selectedIndices = shuffleArray(textIndices).slice(0, count);
+        const blanks = {};
+        selectedIndices.forEach(i => { blanks[i] = true; });
+
+        let html = '';
+        parts.forEach((part, i) => {
+            if (blanks[i]) {
+                const inputId = `entryBlank_${q.id}_${i}`;
+                const val = sel ? (sel.split('|||')[i] || '') : '';
+                html += `<input type="text" class="entry-input" id="${inputId}" value="${val}" placeholder="填入文字" ${confirmed ? 'disabled' : ''} />`;
+            } else {
+                html += `<span>${part}</span>`;
+            }
+        });
+        const correctAnswers = selectedIndices.map(i => parts[i]).join('|||');
+        return { html, correctAnswers, indices: selectedIndices };
+    }
+
     function renderPracticeMode() {
         const pool = getPracticePool();
         if(!pool.length) {
@@ -235,6 +269,37 @@
             <button class="action-btn warning" id="correctAnswerBtn">✏️ 纠错答案</button>
             <button class="action-btn danger" id="deleteQuestionBtn">🗑 删除此题</button>
         </div>` : '';
+
+        if(q.type === 'entry') {
+            const { html: entryHTML, correctAnswers, indices } = renderEntryQuestion(q, sel, confirmed);
+            if(!confirmed) setTempSelection(q.id, { indices, answers: correctAnswers });
+            let confirmHTML = !confirmed ? '<button class="confirm-btn" id="confirmEntryBtn">✅ 确认答案</button>' : '';
+            let fb = '';
+            if(confirmed) {
+                const userInputs = [];
+                indices.forEach(i => {
+                    const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
+                    userInputs.push(inputEl ? inputEl.value : '');
+                });
+                const userAnswers = userInputs.join('|||');
+                const correct = userAnswers === correctAnswers;
+                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
+            }
+            return `<div class="practice-mode-switch">
+                <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部</button>
+                <button class="practice-mode-btn ${practiceMode==='wrong'?'active':''}" id="modeWrongBtn">📕 错题</button>
+                <span class="blank-config">挖空数：<input type="number" id="blankCountInput" value="${blankCount}" min="1" max="10"></span>
+            </div>
+            <div class="question-card" id="qcard">
+                <div class="q-header"><span class="q-number">${catName} #${q.id}</span><span class="q-type">条目</span></div>
+                <div class="q-text" style="line-height:2.5;">${entryHTML}</div>
+                ${confirmHTML}
+                ${fb}
+                ${actionButtons}
+            </div>
+            <div style="text-align:center;margin:8px;">${randomIndex+1}/${shuffledOrder.length}</div>
+            <div class="nav-buttons"><button class="nav-btn" id="prevBtn" ${randomIndex===0?'disabled':''}>◀ 上一题</button><button class="nav-btn btn-primary-nav" id="nextBtn">下一题 ▶</button><button class="nav-btn" id="jumpBtn">🔀 随机</button></div>`;
+        }
 
         if(q.type === 'fill') {
             let inputHTML = `<input type="text" class="fill-input ${confirmed ? (sel.trim()===q.ans.trim()?'correct-input':'wrong-input') : ''}" id="fillAnswer" value="${sel}" placeholder="请输入答案" ${confirmed?'disabled':''}>`;
@@ -270,6 +335,10 @@
         if(!qs.length) return '<div style="text-align:center;padding:30px;">当前类别无错题</div>';
         let html = `<div style="display:flex;justify-content:space-between;margin-bottom:14px;"><b>错题本 (${qs.length})</b><button class="nav-btn" id="clearWrongBtn" style="color:#d4685c;border-color:#d4685c;">清空当前</button></div>`;
         qs.forEach(q => {
+            if(q.type === 'entry') {
+                html += `<div class="question-card" style="background:#fef9f5;"><span class="q-number">#${q.id} 错${getWrongCount(q.id)}次</span> <button class="remove-wrong-btn" data-qid="${q.id}" style="color:var(--wrong); border:none; background:none; font-size:1.4em; cursor:pointer; padding:0 8px;">✕</button><div>${q.q}</div><div class="feedback correct-fb show">原文</div></div>`;
+                return;
+            }
             if(q.type === 'fill') {
                 html += `<div class="question-card" style="background:#fef9f5;"><span class="q-number">#${q.id} 错${getWrongCount(q.id)}次</span> <button class="remove-wrong-btn" data-qid="${q.id}" style="color:var(--wrong); border:none; background:none; font-size:1.4em; cursor:pointer; padding:0 8px;">✕</button><div>${q.q}</div><div class="feedback correct-fb show">答案：${q.ans}</div></div>`;
                 return;
@@ -282,7 +351,22 @@
     }
 
     function renderAllQuestionsList() { const pool = getQuestionsByCategory(currentCategoryId); if(!pool.length) return '<div>暂无题目</div>'; return `<div><b>全部题目 (${pool.length})</b></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">${pool.map(q => `<span class="nav-btn" style="min-width:auto;padding:8px 14px;" onclick="window._jumpToQuestion(${q.id})">#${q.id}</span>`).join('')}</div>`; }
-    function renderImportMode() { const catOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join(''); return `<div><label>导入到类别：</label><select id="importCategory">${catOptions}</select><div class="import-area"><textarea id="importTextarea" placeholder="文本/JSON"></textarea><button class="nav-btn" id="importBtn">解析并导入</button><div id="importResult"></div></div></div>`; }
+    function renderImportMode() { 
+        const catOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join(''); 
+        return `<div>
+            <label>导入到类别：</label><select id="importCategory">${catOptions}</select>
+            <div style="margin-top:8px;">
+                <label>导入类型：</label>
+                <select id="importType"><option value="question">题目（选择/填空）</option><option value="entry">条目（背诵挖空）</option></select>
+            </div>
+            <div class="import-area" style="margin-top:12px;">
+                <textarea id="importTextarea" placeholder="文本/JSON"></textarea>
+                <button class="nav-btn" id="importBtn">解析并导入</button>
+                <button class="nav-btn" id="copyPromptBtn" style="margin-left:8px;">📋 复制导入Prompt</button>
+                <div id="importResult"></div>
+            </div>
+        </div>`; 
+    }
     function renderExportMode() { 
         const token = getToken(); const tokenStatus = token ? '✅ 已保存' : '⚠️ 未设置'; 
         return `<div><h3>📤 导出与同步</h3><button class="nav-btn" id="exportBtn">⬇️ 导出文件</button><button class="nav-btn" id="downloadGistBtn" style="margin-left:10px;">☁️ 从云端下载</button><div class="auto-sync-row" style="margin:16px 0;"><label><input type="checkbox" id="autoSyncCheck" ${autoSyncEnabled?'checked':''}> 做题后自动同步</label></div><div style="margin-top:20px;"><h4>🔑 GitHub Token</h4><input type="password" id="tokenInput" value="${token}"><div style="font-size:0.85em;color:${token?'var(--correct)':'var(--wrong)'};">${tokenStatus}</div><button class="nav-btn" id="saveTokenBtn">💾 保存 Token</button><br><a href="https://github.com/settings/tokens" target="_blank" class="token-link">获取Token（需勾选gist权限）</a></div></div>`; 
@@ -292,6 +376,37 @@
     // 事件委托
     document.getElementById('mainContent').addEventListener('click', function(e) {
         if(e.target.id === 'confirmFillBtn') { const q = getCurrentQuestion(); if(!q || q._confirmed) return; const val = document.getElementById('fillAnswer').value; setTempSelection(q.id, val); q._confirmed = true; if(val.trim() !== q.ans.trim()) incrementWrong(q.id); triggerAutoSync(); renderMainContent(); return; }
+        if(e.target.id === 'confirmEntryBtn') {
+            const q = getCurrentQuestion();
+            if(!q || q._confirmed) return;
+            const sel = getTempSelection(q.id);
+            if(!sel || !sel.indices) return;
+            const userInputs = sel.indices.map(i => {
+                const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
+                return inputEl ? inputEl.value : '';
+            });
+            const userAnswers = userInputs.join('|||');
+            const correct = userAnswers === sel.answers;
+            setTempSelection(q.id, userAnswers);
+            q._confirmed = true;
+            if(!correct) incrementWrong(q.id);
+            triggerAutoSync();
+            renderMainContent();
+            return;
+        }
+        if(e.target.id === 'copyPromptBtn') {
+            const prompt = `请将以下内容转换为可直接导入“在线练习系统”的JSON格式。题型为“条目”（type: "entry"），q字段为原文全文。如果有多段，请用数字序号分段，每个序号一道题。输出JSON数组。\n\n示例输出格式：\n[{"q":"上古之人，其知道者，法于阴阳，和于术数，食饮有节，起居有常，不妄作劳，故能形与神俱，而尽终其天年，度百岁乃去。（《素问·上古天真论》）","type":"entry"}]\n\n请转换以下内容：`;
+            navigator.clipboard.writeText(prompt).then(() => showToast('Prompt已复制'));
+            return;
+        }
+        if(e.target.id === 'blankCountInput') {
+            const val = parseInt(e.target.value);
+            if(val >= 1 && val <= 10) {
+                blankCount = val;
+                renderMainContent();
+            }
+            return;
+        }
         const optEl = e.target.closest('.option[data-action="toggle"]');
         if(optEl) { e.preventDefault(); const qId = parseInt(optEl.dataset.qid); const letter = optEl.dataset.letter; const q = questions.find(q => q.id === qId); if(!q || q._confirmed) return; if(q.type === 'single') { setTempSelection(qId, letter); q._confirmed = true; if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId); triggerAutoSync(); renderMainContent(); } else { let arr = getTempSelection(qId).split('').filter(Boolean); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); setTempSelection(qId, arr.sort().join('')); optEl.classList.toggle('selected', arr.includes(letter)); } return; }
         if(e.target.id === 'confirmBtn') { const q = getCurrentQuestion(); if(!q || q._confirmed) return; q._confirmed = true; if(normalizeAnswer(getTempSelection(q.id)) !== normalizeAnswer(q.ans)) incrementWrong(q.id); triggerAutoSync(); renderMainContent(); return; }
@@ -309,7 +424,7 @@
         if(e.target.id === 'autoSyncCheck') { autoSyncEnabled = e.target.checked; saveAutoSync(); showToast(autoSyncEnabled?'已开启自动同步':'已关闭'); return; }
         if(e.target.id === 'deleteQuestionBtn') { window._showDeleteConfirm(); return; }
         if(e.target.id === 'correctAnswerBtn') { window._showCorrectModal(); return; }
-        // 错题本单题移除（统一风格modal确认）
+        // 错题本单题移除
         const rmBtn = e.target.closest('.remove-wrong-btn');
         if(rmBtn) {
             const qId = parseInt(rmBtn.dataset.qid);
@@ -322,7 +437,19 @@
             return;
         }
     });
-    document.getElementById('mainContent').addEventListener('input', function(e) { if(e.target.id === 'fillAnswer') { const q = getCurrentQuestion(); if(q) setTempSelection(q.id, e.target.value); } });
+    document.getElementById('mainContent').addEventListener('input', function(e) {
+        if(e.target.id === 'fillAnswer') { const q = getCurrentQuestion(); if(q) setTempSelection(q.id, e.target.value); }
+        // 条目输入框自动保存
+        if(e.target.classList.contains('entry-input')) {
+            const q = getCurrentQuestion();
+            if(q) {
+                const sel = getTempSelection(q.id) || {};
+                const inputs = document.querySelectorAll(`.entry-input[id^="entryBlank_${q.id}_"]`);
+                const vals = Array.from(inputs).map(inp => inp.value);
+                setTempSelection(q.id, { ...sel, currentVals: vals.join('|||') });
+            }
+        }
+    });
 
     // 全局函数
     window._copyToAI = function(qId) {
@@ -330,23 +457,37 @@
         if(!q) return;
         const sel = getTempSelection(qId) || '未答';
         let text = `【${categories.find(c=>c.id===q.categoryId)?.name||''}】\n${q.q}\n`;
-        if(q.type !== 'fill') { const labels = ['A','B','C','D','E']; text += q.opts.map((opt,i) => `${labels[i]}) ${opt}`).join('\n') + '\n'; }
-        text += `我的答案：${sel}\n标准答案：${q.ans}\n请解析。`;
+        if(q.type === 'entry') text += `默写片段：${sel}\n`;
+        else if(q.type !== 'fill') { const labels = ['A','B','C','D','E']; text += q.opts.map((opt,i) => `${labels[i]}) ${opt}`).join('\n') + '\n'; }
+        text += `我的答案：${typeof sel === 'string' ? sel : ''}\n标准答案：${q.ans || q.q}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
     window._nextRandom = function() { if(randomIndex<shuffledOrder.length-1){ const cur=getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex++; } renderMainContent(); };
     window._prevRandom = function() { if(randomIndex>0){ const cur=getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex--; } renderMainContent(); };
     window._jumpRandom = function() { const cur=getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex=Math.floor(Math.random()*shuffledOrder.length); renderMainContent(); };
     window._restartRound = function() { getPracticePool().forEach(q=>delete q._confirmed); initRandomOrder(); renderMainContent(); };
-    window._jumpToQuestion = function(qId) { currentTab='practice'; document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); document.querySelector('[data-tab="practice"]').classList.add('active'); const pool=getPracticePool(); const ids=pool.map(q=>q.id); const idx=ids.indexOf(qId); if(idx>=0) randomIndex=idx; renderMainContent(); };
+    // 修复跳转：强制切换到全部题目模式
+    window._jumpToQuestion = function(qId) {
+        currentTab='practice'; 
+        document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+        document.querySelector('[data-tab="practice"]').classList.add('active');
+        practiceMode = 'all';  // 确保从全部列表跳转时使用全部题目池
+        initRandomOrder();
+        const pool=getPracticePool(); 
+        const ids=pool.map(q=>q.id); 
+        const idx=ids.indexOf(qId);
+        if(idx>=0) randomIndex=idx;
+        renderMainContent();
+    };
     window._clearWrongBook = function() { if(!confirm('清空当前类别错题？')) return; getQuestionsByCategory(currentCategoryId).forEach(q=>delete wrongCounts[q.id]); saveWrongCounts(); triggerAutoSync(); renderMainContent(); };
     window._showDeleteConfirm = function() { const q=getCurrentQuestion(); if(!q) return; let modal=document.querySelector('.modal'); if(modal) modal.remove(); modal=document.createElement('div'); modal.className='modal'; modal.innerHTML=`<div class="modal-content"><h3>确认删除</h3><p>删除 #${q.id}？</p><button id="confirmDelYes" class="nav-btn" style="color:#d4685c;">确认</button><button id="confirmDelNo" class="nav-btn">取消</button></div>`; document.body.appendChild(modal); document.getElementById('confirmDelYes').onclick=()=>{ modal.remove(); window._deleteCurrentQuestion(); }; document.getElementById('confirmDelNo').onclick=()=>modal.remove(); };
     window._deleteCurrentQuestion = function() { const q=getCurrentQuestion(); if(!q) return; questions=questions.filter(item=>item.id!==q.id); delete wrongCounts[q.id]; const idx=shuffledOrder.indexOf(q.id); if(idx!==-1){ shuffledOrder.splice(idx,1); if(idx<randomIndex) randomIndex--; if(randomIndex>=shuffledOrder.length) randomIndex=shuffledOrder.length-1; } saveQuestions(); saveWrongCounts(); triggerAutoSync(); renderMainContent(); showToast('已删除'); };
 
-    // 纠错答案（完整实现）
+    // 纠错答案（兼容条目）
     window._showCorrectModal = function() {
         const q = getCurrentQuestion();
         if(!q) return;
+        if(q.type === 'entry') { showToast('条目纠错暂不支持'); return; }
         let modal = document.querySelector('.modal'); if(modal) modal.remove();
         modal = document.createElement('div'); modal.className = 'modal';
         if(q.type === 'fill') {
@@ -362,49 +503,94 @@
             modal.innerHTML = `<div class="modal-content"><h3>纠错答案</h3><p style="margin:4px 0;font-size:0.85em;">${q.type==='multi'?'多选（点击选项切换）':'单选（点击选项选择）'} — 题目 #${q.id}</p><div class="options" style="margin-top:10px;">${optsHTML}</div><div style="display:flex;gap:10px;margin-top:14px;"><button class="nav-btn" id="confirmCorrectBtn">✅ 确认修改</button><button class="nav-btn" id="cancelCorrectBtn">取消</button></div></div>`;
         }
         document.body.appendChild(modal);
-
         if(q.type !== 'fill') {
             let tempCorrect = normalizeAnswer(q.ans);
             modal.querySelectorAll('.option').forEach(opt => {
                 opt.addEventListener('click', function() {
                     const letter = this.dataset.correctLetter;
-                    if(q.type === 'single') {
-                        tempCorrect = letter;
-                        modal.querySelectorAll('.option').forEach(o => o.classList.remove('correct-answer'));
-                        this.classList.add('correct-answer');
-                    } else {
-                        let arr = tempCorrect.split('');
-                        if(arr.includes(letter)) arr = arr.filter(l => l !== letter);
-                        else arr.push(letter);
-                        tempCorrect = arr.sort().join('');
-                        this.classList.toggle('correct-answer');
-                    }
+                    if(q.type === 'single') { tempCorrect = letter; modal.querySelectorAll('.option').forEach(o => o.classList.remove('correct-answer')); this.classList.add('correct-answer'); }
+                    else { let arr = tempCorrect.split(''); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); tempCorrect = arr.sort().join(''); this.classList.toggle('correct-answer'); }
                 });
             });
-            document.getElementById('confirmCorrectBtn').addEventListener('click', () => {
-                if(!tempCorrect) { showToast('请选择正确答案'); return; }
-                q.ans = q.type === 'multi' ? tempCorrect : tempCorrect;
-                const sel = getTempSelection(q.id);
-                if(sel && normalizeAnswer(sel) === normalizeAnswer(q.ans)) delete wrongCounts[q.id];
-                else if(sel) wrongCounts[q.id] = 1;
-                saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新');
-            });
+            document.getElementById('confirmCorrectBtn').addEventListener('click', () => { if(!tempCorrect) { showToast('请选择正确答案'); return; } q.ans = q.type === 'multi' ? tempCorrect : tempCorrect; const sel = getTempSelection(q.id); if(sel && normalizeAnswer(sel) === normalizeAnswer(q.ans)) delete wrongCounts[q.id]; else if(sel) wrongCounts[q.id] = 1; saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新'); });
         } else {
-            document.getElementById('confirmCorrectBtn').addEventListener('click', () => {
-                const newAns = document.getElementById('correctFillInput').value.trim();
-                if(!newAns) { showToast('请输入正确答案'); return; }
-                q.ans = newAns;
-                const sel = getTempSelection(q.id);
-                if(sel && sel.trim() === q.ans.trim()) delete wrongCounts[q.id];
-                else if(sel) wrongCounts[q.id] = 1;
-                saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新');
-            });
+            document.getElementById('confirmCorrectBtn').addEventListener('click', () => { const newAns = document.getElementById('correctFillInput').value.trim(); if(!newAns) { showToast('请输入正确答案'); return; } q.ans = newAns; const sel = getTempSelection(q.id); if(sel && sel.trim() === q.ans.trim()) delete wrongCounts[q.id]; else if(sel) wrongCounts[q.id] = 1; saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新'); });
         }
         document.getElementById('cancelCorrectBtn').addEventListener('click', () => modal.remove());
     };
 
-    window._batchImport = function() { /* 导入逻辑不变 */ };
-    window._exportData = function() { /* 导出逻辑不变 */ };
+    // 导入（增加条目支持）
+    window._batchImport = function() {
+        const text = document.getElementById('importTextarea')?.value.trim();
+        const res = document.getElementById('importResult');
+        if(!text) { if(res) res.innerHTML='⚠️ 请粘贴文本'; return; }
+        const catId = document.getElementById('importCategory')?.value || categories[0]?.id;
+        const importType = document.getElementById('importType')?.value || 'question';
+        let imported = [];
+
+        if(importType === 'entry') {
+            // 解析条目：按数字序号分段
+            const segments = text.split(/(?=\d+\.)/);
+            segments.forEach(seg => {
+                const trimmed = seg.trim();
+                if(!trimmed) return;
+                const content = trimmed.replace(/^\d+\.\s*/, '');
+                if(content) {
+                    imported.push({ q: content, type: 'entry', categoryId: catId });
+                }
+            });
+            if(!imported.length) {
+                imported.push({ q: text, type: 'entry', categoryId: catId });
+            }
+        } else {
+            try {
+                const parsed = JSON.parse(text);
+                if(Array.isArray(parsed) && parsed.length > 0 && parsed[0].q) {
+                    imported = parsed.map(item => ({...item, categoryId: catId, type: item.type || (item.ans && item.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single')}));
+                }
+            } catch(e) {
+                const lines = text.split('\n');
+                let cur = null, opts = [];
+                for(const line of lines) {
+                    const trimmed = line.trim(); if(!trimmed) continue;
+                    const qm = trimmed.match(/^(\d+)[\.\、]\s*(.+)/);
+                    if(qm && !/^[A-E][\.\)]\s*/.test(trimmed)) {
+                        if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); }
+                        cur = { q: qm[2], opts: [], ans: '', type: 'single' }; opts = []; continue;
+                    }
+                    const optSingle = trimmed.match(/^([A-E])[\.\)．]\s*(.+)/);
+                    if(optSingle && cur) { opts.push(optSingle[2]); continue; }
+                    const multiOpts = trimmed.match(/([A-E])[\.\)．]\s*([^A-E]+)/g);
+                    if(multiOpts && cur && multiOpts.length >= 2) { multiOpts.forEach(m => { const match = m.match(/^([A-E])[\.\)．]\s*(.+)/); if(match) opts.push(match[2].trim()); }); continue; }
+                    const ansMatch = trimmed.match(/^答案[：:]\s*(.+)/) || trimmed.match(/^参考答案[：:]\s*(.+)/);
+                    if(ansMatch && cur) { cur.ans = ansMatch[1].replace(/\s/g,''); cur.type = cur.ans.length > 1 ? 'multi' : 'single'; }
+                }
+                if(cur) { if(opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); } else if(opts.length === 0 && cur.ans) { cur.type = 'fill'; cur.categoryId = catId; imported.push(cur); } }
+            }
+        }
+        if(!imported.length) { if(res) res.innerHTML='❌ 无法解析'; return; }
+        const maxId = questions.reduce((max,q) => Math.max(max,q.id), 0);
+        imported.forEach((q,i) => q.id = maxId + i + 1);
+        questions.push(...imported);
+        saveQuestions();
+        initRandomOrder();
+        renderMainContent();
+        if(res) res.innerHTML = `✅ 导入 ${imported.length} 题`;
+        showToast('导入成功');
+    };
+
+    window._exportData = function() {
+        const data = { categories, questions, wrongCounts };
+        const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'tcm_backup.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('导出成功');
+    };
+
     window._saveToken = function() { const token=document.getElementById('tokenInput').value.trim(); if(token){ localStorage.setItem(TOKEN_KEY,token); showToast('Token已保存'); renderMainContent(); } };
 
     // 顶部按钮
