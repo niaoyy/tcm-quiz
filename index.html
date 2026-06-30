@@ -227,19 +227,19 @@
         return text.split(/([，。；？！、：])/g).filter(s => s !== '');
     }
 
-    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复跳跃bug，并支持离开后重新随机
+    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复所有已知问题
     function renderEntryQuestion(q, sel, confirmed) {
         const parts = splitPhrases(q.q);
         const textIndices = [];
         parts.forEach((part, i) => { if (!/^[，。；？！、：]$/.test(part)) textIndices.push(i); });
         const count = Math.min(blankCount, textIndices.length);
-        // 如果已确认或者没有缓存的索引，或者blankCount改变，则重新随机
+        // 如果已确认，直接使用缓存的索引（不再重新随机）
         let selectedIndices;
         if (q._blankIndices && q._blankCount === blankCount) {
             selectedIndices = q._blankIndices;
         } else {
             selectedIndices = shuffleArray(textIndices).slice(0, count);
-            // 仅在未确认时保存索引，确认后不再保存，以便下次随机
+            // 仅在未确认时保存索引
             if (!confirmed) {
                 q._blankIndices = selectedIndices;
                 q._blankCount = blankCount;
@@ -252,7 +252,8 @@
         parts.forEach((part, i) => {
             if (blanks[i]) {
                 const inputId = `entryBlank_${q.id}_${i}`;
-                const val = sel ? (sel.split('|||')[i] || '') : '';
+                // 使用 || 分隔符保存各输入框内容
+                const val = (typeof sel === 'object' && sel.indices) ? (sel.split('|||')[i] || '') : '';
                 html += `<input type="text" class="entry-input" id="${inputId}" value="${val}" placeholder="填入文字" ${confirmed ? 'disabled' : ''} />`;
             } else {
                 html += `<span>${part}</span>`;
@@ -282,19 +283,26 @@
         </div>` : '';
 
         if(q.type === 'entry') {
-            const { html: entryHTML, correctAnswers, indices } = renderEntryQuestion(q, sel, confirmed);
+            // 确保 sel 为对象结构
+            if (typeof sel === 'string' && sel.length > 0) {
+                // 兼容旧数据：如果是字符串，重新构建对象
+                setTempSelection(q.id, null);
+            }
+            const { html: entryHTML, correctAnswers, indices } = renderEntryQuestion(q, getTempSelection(q.id), confirmed);
             if(!confirmed) setTempSelection(q.id, { indices, answers: correctAnswers });
             let confirmHTML = !confirmed ? '<button class="confirm-btn" id="confirmEntryBtn">✅ 确认答案</button>' : '';
             let fb = '';
             if(confirmed) {
-                const userInputs = [];
-                indices.forEach(i => {
-                    const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
-                    userInputs.push(inputEl ? inputEl.value : '');
-                });
-                const userAnswers = userInputs.join('|||');
-                const correct = userAnswers === correctAnswers;
-                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
+                const selData = getTempSelection(q.id);
+                if (selData && selData.indices) {
+                    const userInputs = selData.indices.map(i => {
+                        const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
+                        return inputEl ? inputEl.value : '';
+                    });
+                    const userAnswers = userInputs.join('|||');
+                    const correct = userAnswers === correctAnswers;
+                    fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
+                }
             }
             return `<div class="practice-mode-switch">
                 <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部</button>
@@ -398,7 +406,7 @@
             });
             const userAnswers = userInputs.join('|||');
             const correct = userAnswers === sel.answers;
-            setTempSelection(q.id, userAnswers);
+            setTempSelection(q.id, { indices: sel.indices, answers: sel.answers, lastInput: userAnswers });
             q._confirmed = true;
             if(!correct) incrementWrong(q.id);
             triggerAutoSync();
@@ -433,7 +441,29 @@
             return;
         }
         const optEl = e.target.closest('.option[data-action="toggle"]');
-        if(optEl) { e.preventDefault(); const qId = parseInt(optEl.dataset.qid); const letter = optEl.dataset.letter; const q = questions.find(q => q.id === qId); if(!q || q._confirmed) return; if(q.type === 'single') { setTempSelection(qId, letter); q._confirmed = true; if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId); triggerAutoSync(); renderMainContent(); } else { let arr = getTempSelection(qId).split('').filter(Boolean); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); setTempSelection(qId, arr.sort().join('')); optEl.classList.toggle('selected', arr.includes(letter)); } return; }
+        if(optEl) { 
+            e.preventDefault(); 
+            const qId = parseInt(optEl.dataset.qid); 
+            const letter = optEl.dataset.letter; 
+            const q = questions.find(q => q.id === qId); 
+            if(!q || q._confirmed) return; 
+            if(q.type === 'single') { 
+                setTempSelection(qId, letter); 
+                q._confirmed = true; 
+                if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId); 
+                triggerAutoSync(); 
+                renderMainContent(); 
+            } else { 
+                let current = getTempSelection(qId);
+                if (typeof current !== 'string') current = '';
+                let arr = current.split('').filter(Boolean); 
+                if(arr.includes(letter)) arr = arr.filter(l => l !== letter); 
+                else arr.push(letter); 
+                setTempSelection(qId, arr.sort().join('')); 
+                optEl.classList.toggle('selected', arr.includes(letter)); 
+            } 
+            return; 
+        }
         if(e.target.id === 'confirmBtn') { const q = getCurrentQuestion(); if(!q || q._confirmed) return; q._confirmed = true; if(normalizeAnswer(getTempSelection(q.id)) !== normalizeAnswer(q.ans)) incrementWrong(q.id); triggerAutoSync(); renderMainContent(); return; }
         if(e.target.id === 'copyBtn') { const q = getCurrentQuestion(); if(q) window._copyToAI(q.id); return; }
         if(e.target.id === 'prevBtn') { window._prevRandom(); return; }
@@ -467,7 +497,7 @@
         // 条目输入框自动保存
         if(e.target.classList.contains('entry-input')) {
             const q = getCurrentQuestion();
-            if(q) {
+            if(q && !q._confirmed) {
                 const sel = getTempSelection(q.id) || {};
                 const inputs = document.querySelectorAll(`.entry-input[id^="entryBlank_${q.id}_"]`);
                 const vals = Array.from(inputs).map(inp => inp.value);
@@ -482,17 +512,19 @@
         if(!q) return;
         const sel = getTempSelection(qId) || '未答';
         let text = `【${categories.find(c=>c.id===q.categoryId)?.name||''}】\n${q.q}\n`;
-        if(q.type === 'entry') text += `默写片段：${sel}\n`;
+        if(q.type === 'entry') text += `默写片段：${typeof sel === 'object' ? sel.lastInput || '' : sel}\n`;
         else if(q.type !== 'fill') { const labels = ['A','B','C','D','E']; text += q.opts.map((opt,i) => `${labels[i]}) ${opt}`).join('\n') + '\n'; }
         text += `我的答案：${typeof sel === 'string' ? sel : ''}\n标准答案：${q.ans || q.q}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
-    // 导航函数修改：离开当前题目时清除条目挖空缓存
+    // 导航函数修改：离开当前题目时清除条目挖空缓存和确认状态
     window._nextRandom = function() {
         if(randomIndex < shuffledOrder.length-1) {
             const cur = getCurrentQuestion();
-            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-            delete cur?._confirmed; // 同时清除确认状态，确保下次重新作答
+            if(cur) {
+                if(cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+                delete cur._confirmed;
+            }
             randomIndex++;
         }
         renderMainContent();
@@ -500,16 +532,20 @@
     window._prevRandom = function() {
         if(randomIndex > 0) {
             const cur = getCurrentQuestion();
-            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-            delete cur?._confirmed;
+            if(cur) {
+                if(cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+                delete cur._confirmed;
+            }
             randomIndex--;
         }
         renderMainContent();
     };
     window._jumpRandom = function() {
         const cur = getCurrentQuestion();
-        if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-        delete cur?._confirmed;
+        if(cur) {
+            if(cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+            delete cur._confirmed;
+        }
         randomIndex = Math.floor(Math.random() * shuffledOrder.length);
         renderMainContent();
     };
