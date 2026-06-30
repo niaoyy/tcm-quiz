@@ -227,13 +227,21 @@
         return text.split(/([，。；？！、：])/g).filter(s => s !== '');
     }
 
-    // 渲染条目题（挖空仅针对文字部分，标点保留）
+    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复跳跃bug
     function renderEntryQuestion(q, sel, confirmed) {
         const parts = splitPhrases(q.q);
         const textIndices = [];
         parts.forEach((part, i) => { if (!/^[，。；？！、：]$/.test(part)) textIndices.push(i); });
         const count = Math.min(blankCount, textIndices.length);
-        const selectedIndices = shuffleArray(textIndices).slice(0, count);
+        // 复用已保存的索引，仅在首次或空白数改变时重新随机
+        let selectedIndices;
+        if (q._blankIndices && q._blankCount === blankCount) {
+            selectedIndices = q._blankIndices;
+        } else {
+            selectedIndices = shuffleArray(textIndices).slice(0, count);
+            q._blankIndices = selectedIndices;
+            q._blankCount = blankCount;
+        }
         const blanks = {};
         selectedIndices.forEach(i => { blanks[i] = true; });
 
@@ -395,7 +403,21 @@
             return;
         }
         if(e.target.id === 'copyPromptBtn') {
-            const prompt = `请将以下内容转换为可直接导入“在线练习系统”的JSON格式。题型为“条目”（type: "entry"），q字段为原文全文。如果有多段，请用数字序号分段，每个序号一道题。输出JSON数组。\n\n示例输出格式：\n[{"q":"上古之人，其知道者，法于阴阳，和于术数，食饮有节，起居有常，不妄作劳，故能形与神俱，而尽终其天年，度百岁乃去。（《素问·上古天真论》）","type":"entry"}]\n\n请转换以下内容：`;
+            const prompt = `请将以下内容转换为可直接导入"在线练习系统"的JSON数组格式。系统支持四种题型：单选、多选、填空、条目（背诵挖空）。
+
+题型说明及JSON示例：
+1. 单选题（type: "single"）：列出所有选项，正确答案为单个字母。
+   {"q": "题目内容", "opts": ["选项A","选项B","选项C","选项D"], "ans": "C", "type": "single"}
+2. 多选题（type: "multi"）：列出所有选项，正确答案为多个字母组合（如"ACE"）。
+   {"q": "题目内容", "opts": ["选项1","选项2","选项3","选项4","选项5"], "ans": "ACE", "type": "multi"}
+3. 填空题（type: "fill"）：题目中通常有______或（），直接给出答案文本。
+   {"q": "五脏包括心、肝、脾、肺、______。", "ans": "肾", "type": "fill"}
+4. 条目题（type: "entry"）：用于背诵默写整段文字，无需选项，q字段为完整原文。
+   {"q": "上古之人，其知道者，法于阴阳……", "type": "entry"}
+
+如果内容包含多道题目（如有序号分段），请为每道题生成一个JSON对象，放入数组中。请直接输出JSON数组，无需额外解释。
+
+请转换以下内容：`;
             navigator.clipboard.writeText(prompt).then(() => showToast('Prompt已复制'));
             return;
         }
