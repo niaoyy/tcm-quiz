@@ -227,20 +227,23 @@
         return text.split(/([，。；？！、：])/g).filter(s => s !== '');
     }
 
-    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复跳跃bug
+    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复跳跃bug，并支持离开后重新随机
     function renderEntryQuestion(q, sel, confirmed) {
         const parts = splitPhrases(q.q);
         const textIndices = [];
         parts.forEach((part, i) => { if (!/^[，。；？！、：]$/.test(part)) textIndices.push(i); });
         const count = Math.min(blankCount, textIndices.length);
-        // 复用已保存的索引，仅在首次或空白数改变时重新随机
+        // 如果已确认或者没有缓存的索引，或者blankCount改变，则重新随机
         let selectedIndices;
         if (q._blankIndices && q._blankCount === blankCount) {
             selectedIndices = q._blankIndices;
         } else {
             selectedIndices = shuffleArray(textIndices).slice(0, count);
-            q._blankIndices = selectedIndices;
-            q._blankCount = blankCount;
+            // 仅在未确认时保存索引，确认后不再保存，以便下次随机
+            if (!confirmed) {
+                q._blankIndices = selectedIndices;
+                q._blankCount = blankCount;
+            }
         }
         const blanks = {};
         selectedIndices.forEach(i => { blanks[i] = true; });
@@ -403,7 +406,7 @@
             return;
         }
         if(e.target.id === 'copyPromptBtn') {
-            const prompt = `请将以下内容转换为可直接导入"在线练习系统"的JSON数组格式。系统支持四种题型：单选、多选、填空、条目（背诵挖空）。
+            const prompt = `请将以下内容转换为可直接导入“在线练习系统”的JSON数组格式。系统支持四种题型：单选、多选、填空、条目（背诵挖空）。
 
 题型说明及JSON示例：
 1. 单选题（type: "single"）：列出所有选项，正确答案为单个字母。
@@ -484,16 +487,45 @@
         text += `我的答案：${typeof sel === 'string' ? sel : ''}\n标准答案：${q.ans || q.q}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
-    window._nextRandom = function() { if(randomIndex<shuffledOrder.length-1){ const cur=getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex++; } renderMainContent(); };
-    window._prevRandom = function() { if(randomIndex>0){ const cur=getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex--; } renderMainContent(); };
-    window._jumpRandom = function() { const cur=getCurrentQuestion(); if(cur) delete cur._confirmed; randomIndex=Math.floor(Math.random()*shuffledOrder.length); renderMainContent(); };
-    window._restartRound = function() { getPracticePool().forEach(q=>delete q._confirmed); initRandomOrder(); renderMainContent(); };
-    // 修复跳转：强制切换到全部题目模式
+    // 导航函数修改：离开当前题目时清除条目挖空缓存
+    window._nextRandom = function() {
+        if(randomIndex < shuffledOrder.length-1) {
+            const cur = getCurrentQuestion();
+            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+            delete cur?._confirmed; // 同时清除确认状态，确保下次重新作答
+            randomIndex++;
+        }
+        renderMainContent();
+    };
+    window._prevRandom = function() {
+        if(randomIndex > 0) {
+            const cur = getCurrentQuestion();
+            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+            delete cur?._confirmed;
+            randomIndex--;
+        }
+        renderMainContent();
+    };
+    window._jumpRandom = function() {
+        const cur = getCurrentQuestion();
+        if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
+        delete cur?._confirmed;
+        randomIndex = Math.floor(Math.random() * shuffledOrder.length);
+        renderMainContent();
+    };
+    window._restartRound = function() {
+        getPracticePool().forEach(q => {
+            delete q._confirmed;
+            if(q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
+        });
+        initRandomOrder();
+        renderMainContent();
+    };
     window._jumpToQuestion = function(qId) {
         currentTab='practice'; 
         document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
         document.querySelector('[data-tab="practice"]').classList.add('active');
-        practiceMode = 'all';  // 确保从全部列表跳转时使用全部题目池
+        practiceMode = 'all';
         initRandomOrder();
         const pool=getPracticePool(); 
         const ids=pool.map(q=>q.id); 
