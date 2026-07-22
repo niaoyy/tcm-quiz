@@ -311,7 +311,7 @@
                 const rawAns = sel.answers;
                 // 忽略标点比较
                 const correct = stripPunctuation(rawUser) === stripPunctuation(rawAns);
-                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 答案不正确，完整原文：${q.q}</div>`;
+                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.split('|||').join('、')}</div>`;
             }
             const blankControlHTML = `<span class="blank-config">挖空数：<button class="nav-btn" id="decBlankBtn" style="min-width:36px;padding:4px 10px;">−</button><span style="min-width:30px;text-align:center;display:inline-block;">${blankCount}</span><button class="nav-btn" id="incBlankBtn" style="min-width:36px;padding:4px 10px;">+</button></span>`;
             return `<div class="practice-mode-switch">
