@@ -71,6 +71,9 @@
         .entry-input { border:2px solid var(--accent); border-radius:6px; padding:4px 8px; font-size:1em; width:120px; }
         .blank-config { display:flex; align-items:center; gap:6px; }
         .blank-config button { min-width:36px; padding:4px 10px; font-size:1em; }
+        .sort-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+        .sort-btn { padding:6px 14px; border-radius:20px; border:2px solid var(--border); background:#fff; font-weight:600; cursor:pointer; font-size:0.85em; }
+        .sort-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
     </style>
 </head>
 <body>
@@ -112,6 +115,7 @@
     let shuffledOrder = [], randomIndex = 0;
     let tempSelection = {};
     let autoSyncEnabled = false;
+    let wrongSortOrder = 'id'; // 'id' 或 'count'
 
     // 持久化
     function loadData() {
@@ -222,6 +226,12 @@
     }
     function switchCategory(catId) { currentCategoryId = catId; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent(); }
 
+    // 辅助函数：去除标点、空格，只保留汉字、字母、数字
+    function stripPunctuation(str) {
+        if (!str) return '';
+        return str.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
+    }
+
     // 辅助：将条目原文拆分为短语和标点（标点单独，文字单独）
     function splitPhrases(text) {
         return text.split(/([，。；？！、：])/g).filter(s => s !== '');
@@ -238,7 +248,6 @@
             selectedIndices = q._blankIndices;
         } else {
             selectedIndices = shuffleArray(textIndices).slice(0, count);
-            // 仅在未确认时保存索引，确认后不再保存，以便下次随机
             if (!confirmed) {
                 q._blankIndices = selectedIndices;
                 q._blankCount = blankCount;
@@ -247,7 +256,6 @@
         const blanks = {};
         selectedIndices.forEach(i => { blanks[i] = true; });
 
-        // 用户输入值提取（selObj可能是字符串或对象）
         let userInputs = [];
         if (typeof selObj === 'string' && selObj) {
             userInputs = selObj.split('|||');
@@ -299,11 +307,12 @@
                     const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
                     userInputs.push(inputEl ? inputEl.value : '');
                 });
-                const userAnswers = userInputs.join('|||');
-                const correct = userAnswers === correctAnswers;
-                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.replace(/\|\|\|/g, '')}</div>`;
+                const rawUser = userInputs.join('|||');
+                const rawAns = sel.answers;
+                // 忽略标点比较
+                const correct = stripPunctuation(rawUser) === stripPunctuation(rawAns);
+                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 答案不正确，完整原文：${q.q}</div>`;
             }
-            // 挖空数控制改为按钮
             const blankControlHTML = `<span class="blank-config">挖空数：<button class="nav-btn" id="decBlankBtn" style="min-width:36px;padding:4px 10px;">−</button><span style="min-width:30px;text-align:center;display:inline-block;">${blankCount}</span><button class="nav-btn" id="incBlankBtn" style="min-width:36px;padding:4px 10px;">+</button></span>`;
             return `<div class="practice-mode-switch">
                 <button class="practice-mode-btn ${practiceMode==='all'?'active':''}" id="modeAllBtn">📋 全部</button>
@@ -351,9 +360,21 @@
         const wrongIds = Object.keys(wrongCounts).filter(id => wrongCounts[id] > 0).map(Number);
         if(!wrongIds.length) return '<div style="text-align:center;padding:30px;">📕 错题本为空</div>';
         const pool = getQuestionsByCategory(currentCategoryId);
-        const qs = wrongIds.map(id => pool.find(q => q.id === id)).filter(Boolean);
+        let qs = wrongIds.map(id => pool.find(q => q.id === id)).filter(Boolean);
+        // 排序
+        if (wrongSortOrder === 'id') {
+            qs.sort((a,b) => a.id - b.id);
+        } else {
+            qs.sort((a,b) => (getWrongCount(b.id) - getWrongCount(a.id)) || (a.id - b.id));
+        }
         if(!qs.length) return '<div style="text-align:center;padding:30px;">当前类别无错题</div>';
         let html = `<div style="display:flex;justify-content:space-between;margin-bottom:14px;"><b>错题本 (${qs.length})</b><button class="nav-btn" id="clearWrongBtn" style="color:#d4685c;border-color:#d4685c;">清空当前</button></div>`;
+        // 排序切换按钮
+        html += `<div class="sort-row">
+            <span>排序：</span>
+            <button class="sort-btn ${wrongSortOrder==='id'?'active':''}" id="sortByIdBtn">按题号</button>
+            <button class="sort-btn ${wrongSortOrder==='count'?'active':''}" id="sortByCountBtn">按错误次数</button>
+        </div>`;
         qs.forEach(q => {
             if(q.type === 'entry') {
                 html += `<div class="question-card" style="background:#fef9f5;"><span class="q-number">#${q.id} 错${getWrongCount(q.id)}次</span> <button class="remove-wrong-btn" data-qid="${q.id}" style="color:var(--wrong); border:none; background:none; font-size:1.4em; cursor:pointer; padding:0 8px;">✕</button><div>${q.q}</div><div class="feedback correct-fb show">原文</div></div>`;
@@ -405,10 +426,11 @@
                 const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
                 return inputEl ? inputEl.value : '';
             });
-            const userAnswers = userInputs.join('|||');
-            const correct = userAnswers === sel.answers;
-            // 保存用户答案（统一为字符串，方便后续显示）
-            setTempSelection(q.id, userAnswers);
+            const rawUser = userInputs.join('|||');
+            const rawAns = sel.answers;
+            // 忽略标点比较
+            const correct = stripPunctuation(rawUser) === stripPunctuation(rawAns);
+            setTempSelection(q.id, rawUser);
             q._confirmed = true;
             if(!correct) incrementWrong(q.id);
             triggerAutoSync();
@@ -420,10 +442,8 @@
             navigator.clipboard.writeText(prompt).then(() => showToast('Prompt已复制'));
             return;
         }
-        // 移动端友好的挖空数增减按钮
         if(e.target.id === 'incBlankBtn') {
             if(blankCount < 10) blankCount++;
-            // 清除当前题的挖空缓存，以使用新数量
             const q = getCurrentQuestion();
             if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
             renderMainContent();
@@ -433,6 +453,16 @@
             if(blankCount > 1) blankCount--;
             const q = getCurrentQuestion();
             if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
+            renderMainContent();
+            return;
+        }
+        if(e.target.id === 'sortByIdBtn') {
+            wrongSortOrder = 'id';
+            renderMainContent();
+            return;
+        }
+        if(e.target.id === 'sortByCountBtn') {
+            wrongSortOrder = 'count';
             renderMainContent();
             return;
         }
@@ -453,7 +483,6 @@
         if(e.target.id === 'autoSyncCheck') { autoSyncEnabled = e.target.checked; saveAutoSync(); showToast(autoSyncEnabled?'已开启自动同步':'已关闭'); return; }
         if(e.target.id === 'deleteQuestionBtn') { window._showDeleteConfirm(); return; }
         if(e.target.id === 'correctAnswerBtn') { window._showCorrectModal(); return; }
-        // 错题本单题移除
         const rmBtn = e.target.closest('.remove-wrong-btn');
         if(rmBtn) {
             const qId = parseInt(rmBtn.dataset.qid);
@@ -468,7 +497,6 @@
     });
     document.getElementById('mainContent').addEventListener('input', function(e) {
         if(e.target.id === 'fillAnswer') { const q = getCurrentQuestion(); if(q) setTempSelection(q.id, e.target.value); }
-        // 条目输入框自动保存
         if(e.target.classList.contains('entry-input')) {
             const q = getCurrentQuestion();
             if(q) {
