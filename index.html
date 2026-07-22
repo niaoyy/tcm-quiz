@@ -115,7 +115,7 @@
     let shuffledOrder = [], randomIndex = 0;
     let tempSelection = {};
     let autoSyncEnabled = false;
-    let wrongSortOrder = 'id'; // 'id' 或 'count'
+    let wrongSortOrder = 'id';
 
     // 持久化
     function loadData() {
@@ -237,7 +237,7 @@
         return text.split(/([，。；？！、：])/g).filter(s => s !== '');
     }
 
-    // 渲染条目题（挖空仅针对文字部分，标点保留）—— 修复跳跃bug，并支持离开后重新随机
+    // 渲染条目题
     function renderEntryQuestion(q, selObj, confirmed) {
         const parts = splitPhrases(q.q);
         const textIndices = [];
@@ -257,7 +257,10 @@
         selectedIndices.forEach(i => { blanks[i] = true; });
 
         let userInputs = [];
-        if (typeof selObj === 'string' && selObj) {
+        if (selObj && selObj.userAnswer) {
+            // 已确认：使用保存的用户答案
+            userInputs = selObj.userAnswer.split('|||');
+        } else if (typeof selObj === 'string' && selObj) {
             userInputs = selObj.split('|||');
         } else if (selObj && typeof selObj === 'object' && selObj.currentVals) {
             userInputs = selObj.currentVals.split('|||');
@@ -302,16 +305,11 @@
             let confirmHTML = !confirmed ? '<button class="confirm-btn" id="confirmEntryBtn">✅ 确认答案</button>' : '';
             let fb = '';
             if(confirmed) {
-                const userInputs = [];
-                indices.forEach(i => {
-                    const inputEl = document.getElementById(`entryBlank_${q.id}_${i}`);
-                    userInputs.push(inputEl ? inputEl.value : '');
-                });
-                const rawUser = userInputs.join('|||');
-                const rawAns = sel.answers;
-                // 忽略标点比较
-                const correct = stripPunctuation(rawUser) === stripPunctuation(rawAns);
-                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${correctAnswers.split('|||').join('、')}</div>`;
+                // 从 sel 对象获取用户答案和标准答案
+                const userAnswer = sel.userAnswer || '';
+                const rawAns = sel.answers || correctAnswers;
+                const correct = stripPunctuation(userAnswer) === stripPunctuation(rawAns);
+                fb = correct ? '<div class="feedback correct-fb show">✅ 正确</div>' : `<div class="feedback wrong-fb show">❌ 正确答案：${rawAns.split('|||').join('、')}</div>`;
             }
             const blankControlHTML = `<span class="blank-config">挖空数：<button class="nav-btn" id="decBlankBtn" style="min-width:36px;padding:4px 10px;">−</button><span style="min-width:30px;text-align:center;display:inline-block;">${blankCount}</span><button class="nav-btn" id="incBlankBtn" style="min-width:36px;padding:4px 10px;">+</button></span>`;
             return `<div class="practice-mode-switch">
@@ -361,7 +359,6 @@
         if(!wrongIds.length) return '<div style="text-align:center;padding:30px;">📕 错题本为空</div>';
         const pool = getQuestionsByCategory(currentCategoryId);
         let qs = wrongIds.map(id => pool.find(q => q.id === id)).filter(Boolean);
-        // 排序
         if (wrongSortOrder === 'id') {
             qs.sort((a,b) => a.id - b.id);
         } else {
@@ -369,7 +366,6 @@
         }
         if(!qs.length) return '<div style="text-align:center;padding:30px;">当前类别无错题</div>';
         let html = `<div style="display:flex;justify-content:space-between;margin-bottom:14px;"><b>错题本 (${qs.length})</b><button class="nav-btn" id="clearWrongBtn" style="color:#d4685c;border-color:#d4685c;">清空当前</button></div>`;
-        // 排序切换按钮
         html += `<div class="sort-row">
             <span>排序：</span>
             <button class="sort-btn ${wrongSortOrder==='id'?'active':''}" id="sortByIdBtn">按题号</button>
@@ -428,9 +424,10 @@
             });
             const rawUser = userInputs.join('|||');
             const rawAns = sel.answers;
-            // 忽略标点比较
             const correct = stripPunctuation(rawUser) === stripPunctuation(rawAns);
-            setTempSelection(q.id, rawUser);
+            // 保存用户答案到对象中，不覆盖原数据
+            sel.userAnswer = rawUser;
+            setTempSelection(q.id, sel);
             q._confirmed = true;
             if(!correct) incrementWrong(q.id);
             triggerAutoSync();
@@ -442,30 +439,10 @@
             navigator.clipboard.writeText(prompt).then(() => showToast('Prompt已复制'));
             return;
         }
-        if(e.target.id === 'incBlankBtn') {
-            if(blankCount < 10) blankCount++;
-            const q = getCurrentQuestion();
-            if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
-            renderMainContent();
-            return;
-        }
-        if(e.target.id === 'decBlankBtn') {
-            if(blankCount > 1) blankCount--;
-            const q = getCurrentQuestion();
-            if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
-            renderMainContent();
-            return;
-        }
-        if(e.target.id === 'sortByIdBtn') {
-            wrongSortOrder = 'id';
-            renderMainContent();
-            return;
-        }
-        if(e.target.id === 'sortByCountBtn') {
-            wrongSortOrder = 'count';
-            renderMainContent();
-            return;
-        }
+        if(e.target.id === 'incBlankBtn') { if(blankCount < 10) blankCount++; const q = getCurrentQuestion(); if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; } renderMainContent(); return; }
+        if(e.target.id === 'decBlankBtn') { if(blankCount > 1) blankCount--; const q = getCurrentQuestion(); if(q && q.type === 'entry') { delete q._blankIndices; delete q._blankCount; } renderMainContent(); return; }
+        if(e.target.id === 'sortByIdBtn') { wrongSortOrder = 'id'; renderMainContent(); return; }
+        if(e.target.id === 'sortByCountBtn') { wrongSortOrder = 'count'; renderMainContent(); return; }
         const optEl = e.target.closest('.option[data-action="toggle"]');
         if(optEl) { e.preventDefault(); const qId = parseInt(optEl.dataset.qid); const letter = optEl.dataset.letter; const q = questions.find(q => q.id === qId); if(!q || q._confirmed) return; if(q.type === 'single') { setTempSelection(qId, letter); q._confirmed = true; if(normalizeAnswer(letter) !== normalizeAnswer(q.ans)) incrementWrong(qId); triggerAutoSync(); renderMainContent(); } else { let arr = (getTempSelection(qId) || '').split('').filter(Boolean); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); setTempSelection(qId, arr.sort().join('')); optEl.classList.toggle('selected', arr.includes(letter)); } return; }
         if(e.target.id === 'confirmBtn') { const q = getCurrentQuestion(); if(!q || q._confirmed) return; q._confirmed = true; if(normalizeAnswer(getTempSelection(q.id)) !== normalizeAnswer(q.ans)) incrementWrong(q.id); triggerAutoSync(); renderMainContent(); return; }
@@ -484,27 +461,13 @@
         if(e.target.id === 'deleteQuestionBtn') { window._showDeleteConfirm(); return; }
         if(e.target.id === 'correctAnswerBtn') { window._showCorrectModal(); return; }
         const rmBtn = e.target.closest('.remove-wrong-btn');
-        if(rmBtn) {
-            const qId = parseInt(rmBtn.dataset.qid);
-            let modal = document.querySelector('.modal'); if(modal) modal.remove();
-            modal = document.createElement('div'); modal.className = 'modal';
-            modal.innerHTML = `<div class="modal-content"><h3>确认移除</h3><p>确定要移除这道错题吗？</p><div style="display:flex;gap:10px;margin-top:16px;"><button class="nav-btn" id="confirmRemoveYes" style="color:#d4685c;border-color:#d4685c;">确认</button><button class="nav-btn" id="confirmRemoveNo">取消</button></div></div>`;
-            document.body.appendChild(modal);
-            document.getElementById('confirmRemoveYes').onclick = () => { modal.remove(); delete wrongCounts[qId]; saveWrongCounts(); renderMainContent(); showToast('已移除'); };
-            document.getElementById('confirmRemoveNo').onclick = () => modal.remove();
-            return;
-        }
+        if(rmBtn) { const qId = parseInt(rmBtn.dataset.qid); let modal = document.querySelector('.modal'); if(modal) modal.remove(); modal = document.createElement('div'); modal.className = 'modal'; modal.innerHTML = `<div class="modal-content"><h3>确认移除</h3><p>确定要移除这道错题吗？</p><div style="display:flex;gap:10px;margin-top:16px;"><button class="nav-btn" id="confirmRemoveYes" style="color:#d4685c;border-color:#d4685c;">确认</button><button class="nav-btn" id="confirmRemoveNo">取消</button></div></div>`; document.body.appendChild(modal); document.getElementById('confirmRemoveYes').onclick = () => { modal.remove(); delete wrongCounts[qId]; saveWrongCounts(); renderMainContent(); showToast('已移除'); }; document.getElementById('confirmRemoveNo').onclick = () => modal.remove(); return; }
     });
     document.getElementById('mainContent').addEventListener('input', function(e) {
         if(e.target.id === 'fillAnswer') { const q = getCurrentQuestion(); if(q) setTempSelection(q.id, e.target.value); }
         if(e.target.classList.contains('entry-input')) {
             const q = getCurrentQuestion();
-            if(q) {
-                const sel = getTempSelection(q.id) || {};
-                const inputs = document.querySelectorAll(`.entry-input[id^="entryBlank_${q.id}_"]`);
-                const vals = Array.from(inputs).map(inp => inp.value);
-                setTempSelection(q.id, { ...sel, currentVals: vals.join('|||') });
-            }
+            if(q) { const sel = getTempSelection(q.id) || {}; const inputs = document.querySelectorAll(`.entry-input[id^="entryBlank_${q.id}_"]`); const vals = Array.from(inputs).map(inp => inp.value); setTempSelection(q.id, { ...sel, currentVals: vals.join('|||') }); }
         }
     });
 
@@ -519,90 +482,17 @@
         text += `我的答案：${typeof sel === 'string' ? sel : ''}\n标准答案：${q.ans || q.q}\n请解析。`;
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     };
-    window._nextRandom = function() {
-        if(randomIndex < shuffledOrder.length-1) {
-            const cur = getCurrentQuestion();
-            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-            if(cur) delete cur._confirmed;
-            randomIndex++;
-        }
-        renderMainContent();
-    };
-    window._prevRandom = function() {
-        if(randomIndex > 0) {
-            const cur = getCurrentQuestion();
-            if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-            if(cur) delete cur._confirmed;
-            randomIndex--;
-        }
-        renderMainContent();
-    };
-    window._jumpRandom = function() {
-        const cur = getCurrentQuestion();
-        if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; }
-        if(cur) delete cur._confirmed;
-        randomIndex = Math.floor(Math.random() * shuffledOrder.length);
-        renderMainContent();
-    };
-    window._restartRound = function() {
-        getPracticePool().forEach(q => {
-            delete q._confirmed;
-            if(q.type === 'entry') { delete q._blankIndices; delete q._blankCount; }
-        });
-        initRandomOrder();
-        renderMainContent();
-    };
-    window._jumpToQuestion = function(qId) {
-        currentTab='practice'; 
-        document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-        document.querySelector('[data-tab="practice"]').classList.add('active');
-        practiceMode = 'all';
-        initRandomOrder();
-        const pool=getPracticePool(); 
-        const ids=pool.map(q=>q.id); 
-        const idx=ids.indexOf(qId);
-        if(idx>=0) randomIndex=idx;
-        renderMainContent();
-    };
+    window._nextRandom = function() { if(randomIndex < shuffledOrder.length-1) { const cur = getCurrentQuestion(); if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; } if(cur) delete cur._confirmed; randomIndex++; } renderMainContent(); };
+    window._prevRandom = function() { if(randomIndex > 0) { const cur = getCurrentQuestion(); if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; } if(cur) delete cur._confirmed; randomIndex--; } renderMainContent(); };
+    window._jumpRandom = function() { const cur = getCurrentQuestion(); if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; } if(cur) delete cur._confirmed; randomIndex = Math.floor(Math.random() * shuffledOrder.length); renderMainContent(); };
+    window._restartRound = function() { getPracticePool().forEach(q => { delete q._confirmed; if(q.type === 'entry') { delete q._blankIndices; delete q._blankCount; } }); initRandomOrder(); renderMainContent(); };
+    window._jumpToQuestion = function(qId) { currentTab='practice'; document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); document.querySelector('[data-tab="practice"]').classList.add('active'); practiceMode = 'all'; initRandomOrder(); const pool=getPracticePool(); const ids=pool.map(q=>q.id); const idx=ids.indexOf(qId); if(idx>=0) randomIndex=idx; renderMainContent(); };
     window._clearWrongBook = function() { if(!confirm('清空当前类别错题？')) return; getQuestionsByCategory(currentCategoryId).forEach(q=>delete wrongCounts[q.id]); saveWrongCounts(); triggerAutoSync(); renderMainContent(); };
     window._showDeleteConfirm = function() { const q=getCurrentQuestion(); if(!q) return; let modal=document.querySelector('.modal'); if(modal) modal.remove(); modal=document.createElement('div'); modal.className='modal'; modal.innerHTML=`<div class="modal-content"><h3>确认删除</h3><p>删除 #${q.id}？</p><button id="confirmDelYes" class="nav-btn" style="color:#d4685c;">确认</button><button id="confirmDelNo" class="nav-btn">取消</button></div>`; document.body.appendChild(modal); document.getElementById('confirmDelYes').onclick=()=>{ modal.remove(); window._deleteCurrentQuestion(); }; document.getElementById('confirmDelNo').onclick=()=>modal.remove(); };
     window._deleteCurrentQuestion = function() { const q=getCurrentQuestion(); if(!q) return; questions=questions.filter(item=>item.id!==q.id); delete wrongCounts[q.id]; const idx=shuffledOrder.indexOf(q.id); if(idx!==-1){ shuffledOrder.splice(idx,1); if(idx<randomIndex) randomIndex--; if(randomIndex>=shuffledOrder.length) randomIndex=shuffledOrder.length-1; } saveQuestions(); saveWrongCounts(); triggerAutoSync(); renderMainContent(); showToast('已删除'); };
 
     // 纠错答案（兼容条目）
-    window._showCorrectModal = function() {
-        const q = getCurrentQuestion();
-        if(!q) return;
-        if(q.type === 'entry') { showToast('条目纠错暂不支持'); return; }
-        let modal = document.querySelector('.modal'); if(modal) modal.remove();
-        modal = document.createElement('div'); modal.className = 'modal';
-        if(q.type === 'fill') {
-            modal.innerHTML = `<div class="modal-content"><h3>纠错答案</h3><p style="margin:8px 0;">题目：#${q.id}</p><input type="text" id="correctFillInput" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);" value="${q.ans}"><div style="display:flex;gap:10px;margin-top:14px;"><button class="nav-btn" id="confirmCorrectBtn">✅ 确认修改</button><button class="nav-btn" id="cancelCorrectBtn">取消</button></div></div>`;
-        } else {
-            const labels = ['A','B','C','D','E'];
-            const optsHTML = q.opts.map((opt,i) => {
-                const letter = labels[i];
-                const isCorrect = normalizeAnswer(q.ans).includes(letter);
-                const cls = 'option' + (isCorrect ? ' correct-answer' : '');
-                return `<div class="${cls}" data-correct-letter="${letter}"><span class="opt-letter">${letter}</span>${opt}</div>`;
-            }).join('');
-            modal.innerHTML = `<div class="modal-content"><h3>纠错答案</h3><p style="margin:4px 0;font-size:0.85em;">${q.type==='multi'?'多选（点击选项切换）':'单选（点击选项选择）'} — 题目 #${q.id}</p><div class="options" style="margin-top:10px;">${optsHTML}</div><div style="display:flex;gap:10px;margin-top:14px;"><button class="nav-btn" id="confirmCorrectBtn">✅ 确认修改</button><button class="nav-btn" id="cancelCorrectBtn">取消</button></div></div>`;
-        }
-        document.body.appendChild(modal);
-        if(q.type !== 'fill') {
-            let tempCorrect = normalizeAnswer(q.ans);
-            modal.querySelectorAll('.option').forEach(opt => {
-                opt.addEventListener('click', function() {
-                    const letter = this.dataset.correctLetter;
-                    if(q.type === 'single') { tempCorrect = letter; modal.querySelectorAll('.option').forEach(o => o.classList.remove('correct-answer')); this.classList.add('correct-answer'); }
-                    else { let arr = tempCorrect.split(''); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); tempCorrect = arr.sort().join(''); this.classList.toggle('correct-answer'); }
-                });
-            });
-            document.getElementById('confirmCorrectBtn').addEventListener('click', () => { if(!tempCorrect) { showToast('请选择正确答案'); return; } q.ans = q.type === 'multi' ? tempCorrect : tempCorrect; const sel = getTempSelection(q.id); if(sel && normalizeAnswer(sel) === normalizeAnswer(q.ans)) delete wrongCounts[q.id]; else if(sel) wrongCounts[q.id] = 1; saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新'); });
-        } else {
-            document.getElementById('confirmCorrectBtn').addEventListener('click', () => { const newAns = document.getElementById('correctFillInput').value.trim(); if(!newAns) { showToast('请输入正确答案'); return; } q.ans = newAns; const sel = getTempSelection(q.id); if(sel && sel.trim() === q.ans.trim()) delete wrongCounts[q.id]; else if(sel) wrongCounts[q.id] = 1; saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新'); });
-        }
-        document.getElementById('cancelCorrectBtn').addEventListener('click', () => modal.remove());
-    };
+    window._showCorrectModal = function() { const q = getCurrentQuestion(); if(!q) return; if(q.type === 'entry') { showToast('条目纠错暂不支持'); return; } let modal = document.querySelector('.modal'); if(modal) modal.remove(); modal = document.createElement('div'); modal.className = 'modal'; if(q.type === 'fill') { modal.innerHTML = `<div class="modal-content"><h3>纠错答案</h3><p style="margin:8px 0;">题目：#${q.id}</p><input type="text" id="correctFillInput" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);" value="${q.ans}"><div style="display:flex;gap:10px;margin-top:14px;"><button class="nav-btn" id="confirmCorrectBtn">✅ 确认修改</button><button class="nav-btn" id="cancelCorrectBtn">取消</button></div></div>`; } else { const labels = ['A','B','C','D','E']; const optsHTML = q.opts.map((opt,i) => { const letter = labels[i]; const isCorrect = normalizeAnswer(q.ans).includes(letter); const cls = 'option' + (isCorrect ? ' correct-answer' : ''); return `<div class="${cls}" data-correct-letter="${letter}"><span class="opt-letter">${letter}</span>${opt}</div>`; }).join(''); modal.innerHTML = `<div class="modal-content"><h3>纠错答案</h3><p style="margin:4px 0;font-size:0.85em;">${q.type==='multi'?'多选（点击选项切换）':'单选（点击选项选择）'} — 题目 #${q.id}</p><div class="options" style="margin-top:10px;">${optsHTML}</div><div style="display:flex;gap:10px;margin-top:14px;"><button class="nav-btn" id="confirmCorrectBtn">✅ 确认修改</button><button class="nav-btn" id="cancelCorrectBtn">取消</button></div></div>`; } document.body.appendChild(modal); if(q.type !== 'fill') { let tempCorrect = normalizeAnswer(q.ans); modal.querySelectorAll('.option').forEach(opt => { opt.addEventListener('click', function() { const letter = this.dataset.correctLetter; if(q.type === 'single') { tempCorrect = letter; modal.querySelectorAll('.option').forEach(o => o.classList.remove('correct-answer')); this.classList.add('correct-answer'); } else { let arr = tempCorrect.split(''); if(arr.includes(letter)) arr = arr.filter(l => l !== letter); else arr.push(letter); tempCorrect = arr.sort().join(''); this.classList.toggle('correct-answer'); } }); }); document.getElementById('confirmCorrectBtn').addEventListener('click', () => { if(!tempCorrect) { showToast('请选择正确答案'); return; } q.ans = q.type === 'multi' ? tempCorrect : tempCorrect; const sel = getTempSelection(q.id); if(sel && normalizeAnswer(sel) === normalizeAnswer(q.ans)) delete wrongCounts[q.id]; else if(sel) wrongCounts[q.id] = 1; saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新'); }); } else { document.getElementById('confirmCorrectBtn').addEventListener('click', () => { const newAns = document.getElementById('correctFillInput').value.trim(); if(!newAns) { showToast('请输入正确答案'); return; } q.ans = newAns; const sel = getTempSelection(q.id); if(sel && sel.trim() === q.ans.trim()) delete wrongCounts[q.id]; else if(sel) wrongCounts[q.id] = 1; saveQuestions(); saveWrongCounts(); modal.remove(); renderMainContent(); showToast('答案已更新'); }); } document.getElementById('cancelCorrectBtn').addEventListener('click', () => modal.remove()); };
 
     // 导入（增加条目支持）
     window._batchImport = function() {
@@ -612,104 +502,27 @@
         const catId = document.getElementById('importCategory')?.value || categories[0]?.id;
         const importType = document.getElementById('importType')?.value || 'question';
         let imported = [];
-
         if(importType === 'entry') {
-            // 解析条目：按数字序号分段
             const segments = text.split(/(?=\d+\.)/);
-            segments.forEach(seg => {
-                const trimmed = seg.trim();
-                if(!trimmed) return;
-                const content = trimmed.replace(/^\d+\.\s*/, '');
-                if(content) {
-                    imported.push({ q: content, type: 'entry', categoryId: catId });
-                }
-            });
-            if(!imported.length) {
-                imported.push({ q: text, type: 'entry', categoryId: catId });
-            }
+            segments.forEach(seg => { const trimmed = seg.trim(); if(!trimmed) return; const content = trimmed.replace(/^\d+\.\s*/, ''); if(content) imported.push({ q: content, type: 'entry', categoryId: catId }); });
+            if(!imported.length) imported.push({ q: text, type: 'entry', categoryId: catId });
         } else {
-            try {
-                const parsed = JSON.parse(text);
-                if(Array.isArray(parsed) && parsed.length > 0 && parsed[0].q) {
-                    imported = parsed.map(item => ({...item, categoryId: catId, type: item.type || (item.ans && item.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single')}));
-                }
-            } catch(e) {
-                const lines = text.split('\n');
-                let cur = null, opts = [];
-                for(const line of lines) {
-                    const trimmed = line.trim(); if(!trimmed) continue;
-                    const qm = trimmed.match(/^(\d+)[\.\、]\s*(.+)/);
-                    if(qm && !/^[A-E][\.\)]\s*/.test(trimmed)) {
-                        if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); }
-                        cur = { q: qm[2], opts: [], ans: '', type: 'single' }; opts = []; continue;
-                    }
-                    const optSingle = trimmed.match(/^([A-E])[\.\)．]\s*(.+)/);
-                    if(optSingle && cur) { opts.push(optSingle[2]); continue; }
-                    const multiOpts = trimmed.match(/([A-E])[\.\)．]\s*([^A-E]+)/g);
-                    if(multiOpts && cur && multiOpts.length >= 2) { multiOpts.forEach(m => { const match = m.match(/^([A-E])[\.\)．]\s*(.+)/); if(match) opts.push(match[2].trim()); }); continue; }
-                    const ansMatch = trimmed.match(/^答案[：:]\s*(.+)/) || trimmed.match(/^参考答案[：:]\s*(.+)/);
-                    if(ansMatch && cur) { cur.ans = ansMatch[1].replace(/\s/g,''); cur.type = cur.ans.length > 1 ? 'multi' : 'single'; }
-                }
-                if(cur) { if(opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); } else if(opts.length === 0 && cur.ans) { cur.type = 'fill'; cur.categoryId = catId; imported.push(cur); } }
-            }
+            try { const parsed = JSON.parse(text); if(Array.isArray(parsed) && parsed.length > 0 && parsed[0].q) imported = parsed.map(item => ({...item, categoryId: catId, type: item.type || (item.ans && item.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single')})); } catch(e) { const lines = text.split('\n'); let cur = null, opts = []; for(const line of lines) { const trimmed = line.trim(); if(!trimmed) continue; const qm = trimmed.match(/^(\d+)[\.\、]\s*(.+)/); if(qm && !/^[A-E][\.\)]\s*/.test(trimmed)) { if(cur && opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); } cur = { q: qm[2], opts: [], ans: '', type: 'single' }; opts = []; continue; } const optSingle = trimmed.match(/^([A-E])[\.\)．]\s*(.+)/); if(optSingle && cur) { opts.push(optSingle[2]); continue; } const multiOpts = trimmed.match(/([A-E])[\.\)．]\s*([^A-E]+)/g); if(multiOpts && cur && multiOpts.length >= 2) { multiOpts.forEach(m => { const match = m.match(/^([A-E])[\.\)．]\s*(.+)/); if(match) opts.push(match[2].trim()); }); continue; } const ansMatch = trimmed.match(/^答案[：:]\s*(.+)/) || trimmed.match(/^参考答案[：:]\s*(.+)/); if(ansMatch && cur) { cur.ans = ansMatch[1].replace(/\s/g,''); cur.type = cur.ans.length > 1 ? 'multi' : 'single'; } } if(cur) { if(opts.length >= 2) { cur.opts = opts; cur.categoryId = catId; cur.type = cur.type || (cur.ans && cur.ans.replace(/\s/g,'').length > 1 ? 'multi' : 'single'); imported.push(cur); } else if(opts.length === 0 && cur.ans) { cur.type = 'fill'; cur.categoryId = catId; imported.push(cur); } } }
         }
         if(!imported.length) { if(res) res.innerHTML='❌ 无法解析'; return; }
         const maxId = questions.reduce((max,q) => Math.max(max,q.id), 0);
         imported.forEach((q,i) => q.id = maxId + i + 1);
-        questions.push(...imported);
-        saveQuestions();
-        initRandomOrder();
-        renderMainContent();
-        if(res) res.innerHTML = `✅ 导入 ${imported.length} 题`;
-        showToast('导入成功');
+        questions.push(...imported); saveQuestions(); initRandomOrder(); renderMainContent();
+        if(res) res.innerHTML = `✅ 导入 ${imported.length} 题`; showToast('导入成功');
     };
 
-    window._exportData = function() {
-        const data = { categories, questions, wrongCounts };
-        const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'tcm_backup.json';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('导出成功');
-    };
-
+    window._exportData = function() { const data = { categories, questions, wrongCounts }; const blob = new Blob([JSON.stringify(data)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'tcm_backup.json'; a.click(); URL.revokeObjectURL(url); showToast('导出成功'); };
     window._saveToken = function() { const token=document.getElementById('tokenInput').value.trim(); if(token){ localStorage.setItem(TOKEN_KEY,token); showToast('Token已保存'); renderMainContent(); } };
 
     // 顶部按钮
-    document.getElementById('syncBtn').onclick = () => {
-        const token = getToken();
-        if(!token) {
-            let modal = document.querySelector('.modal'); if(modal) modal.remove();
-            modal = document.createElement('div'); modal.className = 'modal';
-            modal.innerHTML = `<div class="modal-content"><h3>设置 GitHub Token</h3><input type="password" id="quickTokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx"><div style="margin-top:10px;display:flex;gap:10px;"><button class="nav-btn" id="quickSaveToken">保存并同步</button><button class="nav-btn" id="cancelQuick">取消</button></div></div>`;
-            document.body.appendChild(modal);
-            document.getElementById('quickSaveToken').onclick = async () => { const newToken = document.getElementById('quickTokenInput').value.trim(); if(newToken) { localStorage.setItem(TOKEN_KEY, newToken); modal.remove(); await syncNow(); } else showToast('请输入 Token'); };
-            document.getElementById('cancelQuick').onclick = () => modal.remove();
-            return;
-        }
-        syncNow();
-    };
-
-    document.getElementById('manageBtn').onclick = () => {
-        let modal = document.querySelector('.modal'); if(modal) modal.remove();
-        modal = document.createElement('div'); modal.className = 'modal';
-        modal.innerHTML = `<div class="modal-content"><h3>管理类别</h3><ul style="list-style:none;padding:0;margin:14px 0;">${categories.map(c=>`<li style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;">${c.name}<button class="delete-cat" data-id="${c.id}" style="color:red;background:none;border:none;font-size:1.2em;">✕</button></li>`).join('')}</ul><div style="display:flex;gap:8px;"><input id="newCatName" placeholder="新类别" style="flex:1;padding:8px;border-radius:8px;border:1px solid #ccc;"><button id="addCatBtn" class="nav-btn">添加</button></div><button id="closeModal" class="nav-btn" style="margin-top:12px;width:100%;">关闭</button></div>`;
-        document.body.appendChild(modal);
-        document.getElementById('addCatBtn').onclick = () => { const name = document.getElementById('newCatName').value.trim(); if(name) { categories.push({id:Date.now().toString(), name}); saveCategories(); renderCategories(); modal.remove(); } };
-        modal.querySelectorAll('.delete-cat').forEach(b => b.onclick = function() { const id=this.dataset.id; if(confirm('删除类别及题目？')) { questions=questions.filter(q=>q.categoryId!==id); saveQuestions(); categories=categories.filter(c=>c.id!==id); saveCategories(); if(currentCategoryId===id) currentCategoryId='all'; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent(); } modal.remove(); });
-        document.getElementById('closeModal').onclick = () => modal.remove();
-    };
-
-    document.querySelectorAll('.nav-tab').forEach(t=>t.onclick=function(){
-        document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active'));
-        this.classList.add('active');
-        currentTab=this.dataset.tab;
-        if(currentTab==='practice') initRandomOrder();
-        renderMainContent();
-    });
+    document.getElementById('syncBtn').onclick = () => { const token = getToken(); if(!token) { let modal = document.querySelector('.modal'); if(modal) modal.remove(); modal = document.createElement('div'); modal.className = 'modal'; modal.innerHTML = `<div class="modal-content"><h3>设置 GitHub Token</h3><input type="password" id="quickTokenInput" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;" placeholder="ghp_xxxxxxxxxxxx"><div style="margin-top:10px;display:flex;gap:10px;"><button class="nav-btn" id="quickSaveToken">保存并同步</button><button class="nav-btn" id="cancelQuick">取消</button></div></div>`; document.body.appendChild(modal); document.getElementById('quickSaveToken').onclick = async () => { const newToken = document.getElementById('quickTokenInput').value.trim(); if(newToken) { localStorage.setItem(TOKEN_KEY, newToken); modal.remove(); await syncNow(); } else showToast('请输入 Token'); }; document.getElementById('cancelQuick').onclick = () => modal.remove(); return; } syncNow(); };
+    document.getElementById('manageBtn').onclick = () => { let modal = document.querySelector('.modal'); if(modal) modal.remove(); modal = document.createElement('div'); modal.className = 'modal'; modal.innerHTML = `<div class="modal-content"><h3>管理类别</h3><ul style="list-style:none;padding:0;margin:14px 0;">${categories.map(c=>`<li style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;">${c.name}<button class="delete-cat" data-id="${c.id}" style="color:red;background:none;border:none;font-size:1.2em;">✕</button></li>`).join('')}</ul><div style="display:flex;gap:8px;"><input id="newCatName" placeholder="新类别" style="flex:1;padding:8px;border-radius:8px;border:1px solid #ccc;"><button id="addCatBtn" class="nav-btn">添加</button></div><button id="closeModal" class="nav-btn" style="margin-top:12px;width:100%;">关闭</button></div>`; document.body.appendChild(modal); document.getElementById('addCatBtn').onclick = () => { const name = document.getElementById('newCatName').value.trim(); if(name) { categories.push({id:Date.now().toString(), name}); saveCategories(); renderCategories(); modal.remove(); } }; modal.querySelectorAll('.delete-cat').forEach(b => b.onclick = function() { const id=this.dataset.id; if(confirm('删除类别及题目？')) { questions=questions.filter(q=>q.categoryId!==id); saveQuestions(); categories=categories.filter(c=>c.id!==id); saveCategories(); if(currentCategoryId===id) currentCategoryId='all'; saveSettings(); renderCategories(); initRandomOrder(); renderMainContent(); } modal.remove(); }); document.getElementById('closeModal').onclick = () => modal.remove(); };
+    document.querySelectorAll('.nav-tab').forEach(t=>t.onclick=function(){ document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active')); this.classList.add('active'); currentTab=this.dataset.tab; if(currentTab==='practice') initRandomOrder(); renderMainContent(); });
 
     loadData(); renderCategories(); initRandomOrder(); renderMainContent();
 })();
