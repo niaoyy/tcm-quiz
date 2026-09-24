@@ -523,7 +523,7 @@
     window._prevRandom = function() { if(randomIndex > 0) { const cur = getCurrentQuestion(); if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; } if(cur) delete cur._confirmed; randomIndex--; } renderMainContent(); };
     window._jumpRandom = function() { const cur = getCurrentQuestion(); if(cur && cur.type === 'entry') { delete cur._blankIndices; delete cur._blankCount; } if(cur) delete cur._confirmed; randomIndex = Math.floor(Math.random() * shuffledOrder.length); renderMainContent(); };
     window._restartRound = function() { getPracticePool().forEach(q => { delete q._confirmed; if(q.type === 'entry') { delete q._blankIndices; delete q._blankCount; } }); initRandomOrder(); renderMainContent(); };
-    window._jumpToQuestion = function(qId) { currentTab='practice'; document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); document.querySelector('[data-tab="practice"]').classList.add('active'); practiceMode = 'all'; initRandomOrder(); const pool=getPracticePool(); const ids=pool.map(q=>q.id); const idx=ids.indexOf(qId); if(idx>=0) randomIndex=idx; renderMainContent(); };
+    window._jumpToQuestion = function(qId) { currentTab='practice'; document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); document.querySelector('[data-tab="practice"]').classList.add('active'); practiceMode = 'all'; const pool=getPracticePool(); shuffledOrder=pool.map(q=>q.id); const idx=shuffledOrder.indexOf(qId); randomIndex=idx>=0?idx:0; tempSelection={}; renderMainContent(); };
     window._clearWrongBook = function() { if(!confirm('清空当前类别错题？')) return; getQuestionsByCategory(currentCategoryId).forEach(q=>delete wrongCounts[q.id]); saveWrongCounts(); triggerAutoSync(); renderMainContent(); };
     window._showDeleteConfirm = function() { const q=getCurrentQuestion(); if(!q) return; let modal=document.querySelector('.modal'); if(modal) modal.remove(); modal=document.createElement('div'); modal.className='modal'; modal.innerHTML=`<div class="modal-content"><h3>确认删除</h3><p>删除 #${q.id}？</p><button id="confirmDelYes" class="nav-btn" style="color:#d4685c;">确认</button><button id="confirmDelNo" class="nav-btn">取消</button></div>`; document.body.appendChild(modal); document.getElementById('confirmDelYes').onclick=()=>{ modal.remove(); window._deleteCurrentQuestion(); }; document.getElementById('confirmDelNo').onclick=()=>modal.remove(); };
     window._deleteCurrentQuestion = function() { const q=getCurrentQuestion(); if(!q) return; questions=questions.filter(item=>item.id!==q.id); delete wrongCounts[q.id]; const idx=shuffledOrder.indexOf(q.id); if(idx!==-1){ shuffledOrder.splice(idx,1); if(idx<randomIndex) randomIndex--; if(randomIndex>=shuffledOrder.length) randomIndex=shuffledOrder.length-1; } saveQuestions(); saveWrongCounts(); triggerAutoSync(); renderMainContent(); showToast('已删除'); };
@@ -607,9 +607,20 @@
         currentImportType = importType;
         let imported = [];
         if(importType === 'entry') {
-            const segments = text.split(/(?=\d+\.)/);
-            segments.forEach(seg => { const trimmed = seg.trim(); if(!trimmed) return; const content = trimmed.replace(/^\d+\.\s*/, ''); if(content) imported.push({ q: content, type: 'entry', categoryId: catId }); });
-            if(!imported.length) imported.push({ q: text, type: 'entry', categoryId: catId });
+            try {
+                const parsed = JSON.parse(text);
+                const items = Array.isArray(parsed) ? parsed : (parsed && parsed.q ? [parsed] : []);
+                if(items.length > 0) imported = items.map(item => ({ ...item, opts: undefined, ans: item.ans, type: 'entry', categoryId: catId }));
+            } catch(e) {
+                const segments = text.split(/(?=\d+[\.\、])/);
+                segments.forEach(seg => {
+                    const trimmed = seg.trim();
+                    if(!trimmed) return;
+                    const content = trimmed.replace(/^\d+[\.\、]\s*/, '');
+                    if(content) imported.push({ q: content, type: 'entry', categoryId: catId });
+                });
+                if(!imported.length) imported.push({ q: text, type: 'entry', categoryId: catId });
+            }
         } else if(importType === 'qa') {
             try {
                 const parsed = JSON.parse(text);
